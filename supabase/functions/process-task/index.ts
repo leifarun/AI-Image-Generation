@@ -273,12 +273,6 @@ async function handleTask(taskId: string): Promise<void> {
     }
   } catch (e) {
     console.error(`[task ${taskId}] 豆包生成失败:`, e)
-    const message = String(e)
-    // 内容审核类失败重试同一个 prompt 没有意义，直接给出可操作提示
-    if (message.includes('InputTextSensitiveContentDetected') || message.includes('内容审核未通过')) {
-      await failTask(taskId, `豆包内容审核未通过：${message.slice(0, 180)}`)
-      return
-    }
     // 重试 1 次
     const retry = await supabase.from('tasks').select('retry_count').eq('id', taskId).single()
     const count = (retry?.data?.retry_count ?? 0) as number
@@ -288,7 +282,7 @@ async function handleTask(taskId: string): Promise<void> {
         retry_count: count + 1
       }).eq('id', taskId)
     } else {
-      await failTask(taskId, `豆包生成失败：${message.slice(0, 200)}`)
+      await failTask(taskId, `豆包生成失败：${String(e).slice(0, 200)}`)
     }
   }
 }
@@ -336,12 +330,7 @@ function assemblePrompt(
     marketplace: string
   }
 ): string {
-  const imageUrls = (ctx.images || []).filter(Boolean)
-  // 不要把商品图片 URL 写进文本指令：豆包文本审核会把 URL / 长令牌判为“敏感信息”。
-  // 参考图已通过图片输入（Base64）单独传给模型，这里只做数量提示。
-  const imageText = imageUrls.length
-    ? `（已随请求附带 ${imageUrls.length} 张商品参考图，见图片输入）`
-    : '（无商品参考图）'
+  const imageText = (ctx.images || []).filter(Boolean).join('\n')
   const bulletText = (ctx.bullets || []).length
     ? ctx.bullets.map((b, i) => `${i + 1}. ${b}`).join('\n')
     : ''
@@ -533,44 +522,11 @@ function marketplaceToDomain(marketplace: string): string {
 }
 
 // ---------- 调用豆包 API ----------
-// 豆包会对 prompt 做文本安全审核。URL、邮箱、手机号、超长数字串等常被判定为
-// “敏感信息”（InputTextSensitiveContentDetected），而这些内容对出图没有帮助，
-// 因此发送前统一清理；若仍被拦截，再用“安全模式”（去掉合规红线明细）重试一次。
-function sanitizePromptForModel(text: string): string {
-  return text
-    .replace(/https?:\/\/[^\s]+/gi, ' ')
-    .replace(/\bwww\.[^\s]+/gi, ' ')
-    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, ' ')
-    .replace(/(?:\+?\d[\d\s-]{7,}\d)/g, ' ')
-    .replace(/\b\d{8,}\b/g, ' ')
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-// 审核不通过时的安全模式：合规红线里逐条罗列的敏感词本身也会触发审核，
-// 这里改为通用合规要求，保留“不要违规”的意图，但不再把敏感词原文喂给模型。
-function buildModerationSafePrompt(text: string): string {
-  const generic = '\n避免绝对化用语、医疗功效宣称、虚假承诺、侵权及平台违禁内容。'
-  return sanitizePromptForModel(text)
-    .replace(/【违禁词合规红线】[\s\S]*?(?=\n【|$)/g, `【违禁词合规红线】${generic}`)
-    .replace(/【合规红线】[\s\S]*?(?=\n【|$)/g, `【合规红线】${generic}`)
-}
-
-interface DoubaoAttempt {
-  ok: boolean
-  status: number
-  errorText: string
-  url?: string
-}
-
-async function requestDoubaoImage(
+async function callDoubao(
   prompt: string,
   referenceImages: string[] | null,
   model: string
-): Promise<DoubaoAttempt> {
+): Promise<string> {
   const body: Record<string, unknown> = {
     model,
     prompt,
@@ -591,54 +547,16 @@ async function requestDoubaoImage(
   }, 90000) // 豆包 5.5 生成耗时波动较大；90 秒仍低于函数 150 秒总上限
 
   if (!resp.ok) {
-    return { ok: false, status: resp.status, errorText: await resp.text() }
+    const errText = await resp.text()
+    throw new Error(`豆包 API ${resp.status}: ${errText.slice(0, 200)}`)
   }
+
   const json = await resp.json()
   const url = json?.data?.[0]?.url
   if (!url) {
-    return { ok: false, status: resp.status, errorText: '豆包 API 未返回图片链接' }
+    throw new Error('豆包 API 未返回图片链接')
   }
-  return { ok: true, status: resp.status, errorText: '', url }
-}
-
-function extractRequestId(errorText: string): string {
-  const m = errorText.match(/Request id:\s*([A-Za-z0-9-]+)/i)
-  return m ? m[1] : ''
-}
-
-async function callDoubao(
-  prompt: string,
-  referenceImages: string[] | null,
-  model: string
-): Promise<string> {
-  const cleaned = sanitizePromptForModel(prompt)
-  if (cleaned.length !== prompt.length) {
-    console.log(`[callDoubao] 已清理敏感/无关字符：${prompt.length} → ${cleaned.length} 字`)
-  }
-
-  const first = await requestDoubaoImage(cleaned, referenceImages, model)
-  if (first.ok && first.url) return first.url
-
-  const moderationBlocked =
-    first.status === 400 && /InputTextSensitiveContentDetected|SensitiveContent/i.test(first.errorText)
-  if (moderationBlocked) {
-    console.warn(`[callDoubao] 文本审核未通过，启用安全模式重试：${first.errorText.slice(0, 120)}`)
-    const safeMode = buildModerationSafePrompt(prompt)
-    if (safeMode && safeMode !== cleaned) {
-      const second = await requestDoubaoImage(safeMode, referenceImages, model)
-      if (second.ok && second.url) {
-        console.log('[callDoubao] 安全模式重试成功')
-        return second.url
-      }
-      const requestId = extractRequestId(second.errorText)
-      throw new Error(
-        `豆包内容审核未通过：指令或卖点含敏感内容，请精简模板/卖点后重做` +
-        (requestId ? `（Request id: ${requestId}）` : '')
-      )
-    }
-  }
-
-  throw new Error(`豆包 API ${first.status}: ${first.errorText.slice(0, 200)}`)
+  return url
 }
 
 // 下载亚马逊参考图并转为 data URL，限制数量与体积，避免请求体过大
