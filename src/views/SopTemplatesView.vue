@@ -1,0 +1,457 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  fetchAllTemplates,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  type SopTemplateRow,
+  type SopTemplateInput
+} from '@/api/sop'
+import { formatDateTime } from '@/utils/datetime'
+
+const loading = ref(false)
+const list = ref<SopTemplateRow[]>([])
+
+const dialogVisible = ref(false)
+const expandedKeys = ref<string[]>([])
+const dialogMode = ref<'create' | 'edit' | 'create_child' | 'edit_child'>('create')
+const editingId = ref<string | null>(null)
+const parentId = ref<string | null>(null)
+const submitting = ref(false)
+
+const formRef = ref()
+const form = reactive<SopTemplateInput>({
+  name: '',
+  content: '',
+  compliance_redlines: '',
+  is_default: false,
+  is_active: true,
+  image_count: 1,
+  parent_id: null,
+  sort_order: 0
+})
+
+const rules = {
+  name: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
+  content: [{ required: true, message: '请输入指令内容', trigger: 'blur' }]
+}
+
+const placeholders = [
+  { key: '{{图片数量}}', desc: '图片数量' },
+  { key: '{{商品图片}}', desc: '商品图片' },
+  { key: '{{商品标题}}', desc: '商品标题' },
+  { key: '{{商品品牌名}}', desc: '商品品牌名' },
+  { key: '{{五点描述}}', desc: '五点描述' },
+  { key: '{{所有卖点信息}}', desc: '所有卖点信息' },
+  { key: '{{卖点补充}}', desc: '卖点补充' },
+  { key: '{{违禁词合规红线}}', desc: '违禁词合规红线' },
+  { key: '{{商品资料}}', desc: '全部商品资料' }
+]
+
+const parentTemplates = computed(() =>
+  list.value.filter((row) => !row.parent_id)
+)
+
+const tableData = computed<Array<SopTemplateRow & { children?: SopTemplateRow[] }>>(() =>
+  parentTemplates.value.map((parent) => ({
+    ...parent,
+    children: list.value
+      .filter((row) => row.parent_id === parent.id)
+      .sort((a, b) => a.sort_order - b.sort_order)
+  }))
+)
+
+const dialogTitle = computed(() => {
+  if (dialogMode.value === 'create') return '新建独立模板'
+  if (dialogMode.value === 'create_child') return '新增子模板'
+  if (dialogMode.value === 'edit_child') return '编辑子模板'
+  return '编辑母模板'
+})
+
+const isChildMode = computed(
+  () => dialogMode.value === 'create_child' || dialogMode.value === 'edit_child'
+)
+
+const isMotherTemplate = computed(
+  () => !isChildMode.value && Boolean(editingId.value) && childCount(editingId.value ?? '') > 0
+)
+
+async function load() {
+  loading.value = true
+  try {
+    list.value = await fetchAllTemplates()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function childCount(parentId: string): number {
+  return list.value.filter((row) => row.parent_id === parentId).length
+}
+
+function handleExpandChange(
+  row: { id: string },
+  expanded: boolean | Array<{ id: string }>
+) {
+  if (Array.isArray(expanded)) {
+    expandedKeys.value = expanded.map((item) => item.id)
+    return
+  }
+  if (expanded) {
+    if (!expandedKeys.value.includes(row.id)) expandedKeys.value.push(row.id)
+  } else {
+    expandedKeys.value = expandedKeys.value.filter((id) => id !== row.id)
+  }
+}
+
+function openCreate() {
+  dialogMode.value = 'create'
+  editingId.value = null
+  parentId.value = null
+  Object.assign(form, {
+    name: '',
+    content: '',
+    compliance_redlines: '',
+    is_default: false,
+    is_active: true,
+    image_count: 1,
+    parent_id: null,
+    sort_order: 0
+  })
+  dialogVisible.value = true
+}
+
+function openEdit(source: unknown) {
+  const row = source as SopTemplateRow
+  dialogMode.value = row.parent_id ? 'edit_child' : 'edit'
+  editingId.value = row.id
+  parentId.value = row.parent_id
+  Object.assign(form, {
+    name: row.name,
+    content: row.content,
+    compliance_redlines: row.compliance_redlines ?? '',
+    is_default: row.is_default,
+    is_active: row.is_active,
+    image_count: row.image_count,
+    parent_id: row.parent_id,
+    sort_order: row.sort_order ?? 0
+  })
+  dialogVisible.value = true
+}
+
+function openCreateChild(source: unknown) {
+  const parent = source as SopTemplateRow
+  dialogMode.value = 'create_child'
+  editingId.value = null
+  parentId.value = parent.id
+  Object.assign(form, {
+    name: '',
+    content: '',
+    compliance_redlines: parent.compliance_redlines ?? '',
+    is_default: false,
+    is_active: true,
+    image_count: 1,
+    parent_id: parent.id,
+    sort_order: childCount(parent.id) + 1
+  })
+  dialogVisible.value = true
+}
+
+function insertPlaceholder(
+  key: string,
+  target: 'content' | 'compliance_redlines' = 'content'
+) {
+  form[target] += key
+}
+
+async function handleSubmit() {
+  await formRef.value.validate()
+  submitting.value = true
+  try {
+    const payload: SopTemplateInput = {
+      name: form.name,
+      content: form.content,
+      compliance_redlines: form.compliance_redlines,
+      is_default: isChildMode.value ? false : form.is_default,
+      is_active: form.is_active,
+      image_count: isChildMode.value ? 1 : form.image_count,
+      parent_id: isChildMode.value ? parentId.value : null,
+      sort_order: isChildMode.value ? form.sort_order : 0
+    }
+
+    if (dialogMode.value === 'create' || dialogMode.value === 'create_child') {
+      await createTemplate(payload)
+      ElMessage.success(isChildMode.value ? '子模板已创建' : '模板已创建')
+    } else if (editingId.value) {
+      await updateTemplate(editingId.value, payload)
+      ElMessage.success(isChildMode.value ? '子模板已更新' : '模板已更新')
+    }
+    dialogVisible.value = false
+    load()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function handleDelete(source: unknown) {
+  const row = source as SopTemplateRow
+  const tip = row.parent_id
+    ? `确定删除子模板「${row.name}」吗？`
+    : `确定删除模板「${row.name}」吗？其下所有子模板会一并删除。`
+  await ElMessageBox.confirm(tip, '删除确认', { type: 'warning' })
+  try {
+    await deleteTemplate(row.id)
+    ElMessage.success('已删除')
+    load()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '删除失败')
+  }
+}
+
+async function handleToggleActive(source: unknown) {
+  const row = source as SopTemplateRow
+  try {
+    await updateTemplate(row.id, {
+      name: row.name,
+      content: row.content,
+      compliance_redlines: row.compliance_redlines ?? '',
+      is_default: row.is_default,
+      is_active: !row.is_active,
+      image_count: row.image_count,
+      parent_id: row.parent_id,
+      sort_order: row.sort_order ?? 0
+    })
+    ElMessage.success(row.is_active ? '已停用' : '已启用')
+    load()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '操作失败')
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="sop-page">
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-head">
+          <span>AI 指令 SOP 模板</span>
+          <el-button type="primary" size="small" @click="openCreate">新建独立模板</el-button>
+        </div>
+      </template>
+
+      <el-table
+        v-loading="loading"
+        :data="tableData"
+        border
+        row-key="id"
+        :tree-props="{ children: 'children' }"
+        :expand-row-keys="expandedKeys"
+        @expand-change="handleExpandChange"
+        :row-class-name="({ row }) => (row.parent_id ? 'child-row' : 'parent-row')"
+      >
+        <el-table-column label="模板名称" min-width="180">
+          <template #default="{ row }">
+            <span :class="{ 'child-name': row.parent_id }">{{ row.name }}</span>
+            <el-tag
+              v-if="!row.parent_id && row.children?.length"
+              size="small"
+              type="warning"
+              effect="plain"
+              class="role-tag"
+            >
+              母模板
+            </el-tag>
+            <el-tag v-else-if="row.parent_id" size="small" type="info" effect="plain" class="role-tag">
+              子模板
+            </el-tag>
+            <el-tag v-else size="small" effect="plain" class="role-tag">独立模板</el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="指令内容" min-width="320">
+          <template #default="{ row }">
+            <span class="content-preview">{{ row.content }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="默认" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.is_default" type="success" size="small">默认</el-tag>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="张数" width="80" align="center">
+          <template #default="{ row }">
+            {{ row.parent_id ? '—' : `${row.children?.length || row.image_count} 张` }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="状态" width="80" align="center">
+          <template #default="{ row }">
+            <el-switch :model-value="row.is_active" @change="handleToggleActive(row)" />
+          </template>
+        </el-table-column>
+
+        <el-table-column label="更新时间" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="210" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button
+              v-if="!row.parent_id"
+              link
+              type="primary"
+              size="small"
+              @click="openCreateChild(row)"
+            >
+              新增子模板
+            </el-button>
+            <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无模板，点击右上角「新建独立模板」开始" :image-size="72" />
+        </template>
+      </el-table>
+    </el-card>
+
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="680px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
+        <el-form-item label="模板名称" prop="name">
+          <el-input v-model="form.name" :placeholder="isChildMode ? '例如：图2 使用场景图' : '例如：主图+附图6张标准版'" />
+        </el-form-item>
+
+        <el-form-item label="违禁词合规红线（可选）">
+          <el-input
+            v-model="form.compliance_redlines"
+            type="textarea"
+            :rows="3"
+            placeholder="填写本模板需要遵守的违禁词和合规边界"
+          />
+          <div class="placeholder-bar">
+            <span class="ph-label">红线内可插入变量：</span>
+            <el-tag
+              v-for="p in placeholders"
+              :key="`redline-${p.key}`"
+              class="ph-tag"
+              size="small"
+              :title="p.desc"
+              @click="insertPlaceholder(p.key, 'compliance_redlines')"
+            >
+              {{ p.key }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="指令内容" prop="content">
+          <el-input
+            v-model="form.content"
+            type="textarea"
+            :rows="8"
+            :placeholder="isChildMode ? '只写这一张图的具体要求，公共规则由母模板提供' : '公共规则：规格、配色、字体、合规红线等'"
+          />
+          <div class="placeholder-bar">
+            <span class="ph-label">可插入变量：</span>
+            <el-tag
+              v-for="p in placeholders"
+              :key="`content-${p.key}`"
+              class="ph-tag"
+              size="small"
+              :title="p.desc"
+              @click="insertPlaceholder(p.key, 'content')"
+            >
+              {{ p.key }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item v-if="!isChildMode && !isMotherTemplate" label="生成张数">
+          <el-input-number v-model="form.image_count" :min="1" :max="10" />
+          <span class="form-tip">母模板按勾选的子模板数生成，此值仅作旧版兼容</span>
+        </el-form-item>
+
+        <el-form-item v-if="isChildMode" label="排序">
+          <el-input-number v-model="form.sort_order" :min="1" :max="99" />
+          <span class="form-tip">数字越小越靠前</span>
+        </el-form-item>
+
+        <el-form-item v-if="!isChildMode">
+          <el-checkbox v-model="form.is_default">设为默认模板</el-checkbox>
+          <el-checkbox v-model="form.is_active">启用</el-checkbox>
+        </el-form-item>
+        <el-form-item v-else>
+          <el-checkbox v-model="form.is_active">启用</el-checkbox>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style lang="scss" scoped>
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.content-preview {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.role-tag {
+  margin-left: 6px;
+}
+
+.child-name {
+  padding-left: 18px;
+  color: #606266;
+}
+
+.form-tip {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.placeholder-bar {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  .ph-label {
+    font-size: 12px;
+    color: #909399;
+  }
+
+  .ph-tag {
+    cursor: pointer;
+  }
+}
+
+:deep(.child-row) {
+  background-color: #fafafa;
+}
+</style>
