@@ -53,7 +53,8 @@ async function downloadAll() {
       })
     )
     for (const { index, blob } of files) {
-      zip.file(`image-${String(index + 1).padStart(2, '0')}.png`, blob)
+      const extension = blob.type.includes('jpeg') ? 'jpg' : 'png'
+      zip.file(`image-${String(index + 1).padStart(2, '0')}.${extension}`, blob)
     }
     const zipBlob = await zip.generateAsync({ type: 'blob' })
     const link = document.createElement('a')

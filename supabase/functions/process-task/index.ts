@@ -5,6 +5,7 @@
 // ============================================================
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { Image } from 'npm:imagescript@4.0.0'
 
 // 环境变量（在 Supabase 控制台 Edge Function Secrets 里配置）
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -15,6 +16,7 @@ const ARK_BASE_URL = Deno.env.get('ARK_BASE_URL') || 'https://ark.cn-beijing.vol
 const FALLBACK_DOUBAO_MODEL = Deno.env.get('DOUBAO_MODEL') || 'doubao-seedream-4-5-251128'
 const DOUBAO_REQUEST_TIMEOUT_MS = 130_000
 const OUTPUT_IMAGE_SIZE = '1600x1600'
+const MAX_RESULT_IMAGE_BYTES = 2 * 1024 * 1024
 
 // 诊断：确认关键环境变量是否注入（不打印明文，只看是否存在）
 console.log('[诊断] SUPABASE_URL 存在:', !!Deno.env.get('SUPABASE_URL'))
@@ -682,20 +684,39 @@ async function fetchWithTimeout(
 
 // ---------- 图片转存到 storage（豆包 URL 24h 失效，需转存） ----------
 async function saveImageToStorage(imageUrl: string, taskId: string): Promise<string> {
-  const resp = await fetch(imageUrl)
+  const resp = await fetchWithTimeout(imageUrl, {}, 30_000)
   if (!resp.ok) throw new Error('下载豆包图片失败')
-  const buf = await resp.arrayBuffer()
+  const source = new Uint8Array(await resp.arrayBuffer())
+  const image = await Image.decode(source)
+  const jpeg = await encodeJpegWithinSizeLimit(image)
 
-  const path = `results/${taskId}/${crypto.randomUUID()}.png`
-  const { error } = await supabase.storage.from('task-results').upload(path, buf, {
-    contentType: 'image/png',
+  const path = `results/${taskId}/${crypto.randomUUID()}.jpg`
+  const { error } = await supabase.storage.from('task-results').upload(path, jpeg, {
+    contentType: 'image/jpeg',
     upsert: false
   })
   if (error) throw new Error(`保存图片失败：${error.message}`)
+  console.log(
+    `[task ${taskId}] 结果图已转为 JPEG：${(jpeg.byteLength / 1024 / 1024).toFixed(2)}MB`
+  )
 
   // 返回可访问的公开 URL
   const { data: urlData } = supabase.storage.from('task-results').getPublicUrl(path)
   return urlData.publicUrl
+}
+
+async function encodeJpegWithinSizeLimit(image: Image): Promise<Uint8Array> {
+  // 优先保持画质；只有实际超过 2MB 时才逐档降低 JPEG 质量。
+  for (const quality of [92, 88, 84, 80, 76, 72, 68, 64, 60, 55, 50, 45, 40]) {
+    const encoded = await image.encodeJPEG({
+      quality,
+      subsampling: '4:2:0',
+      background: 0xffffffff,
+      gainMap: false
+    })
+    if (encoded.byteLength <= MAX_RESULT_IMAGE_BYTES) return encoded
+  }
+  throw new Error('结果图压缩后仍超过 2MB')
 }
 
 // ---------- 标记失败 ----------
