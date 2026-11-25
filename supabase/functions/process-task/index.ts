@@ -346,30 +346,16 @@ function assemblePrompt(
     '竞品五点描述': bulletText,
     '竞品卖点补充': sellingText,
     '竞品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}`,
-    // 兼容 v0.1.2 及更早模板中的旧占位符
-    '商品图片': imageText,
-    '商品标题': ctx.title || '',
-    '商品品牌名': ctx.brand_name || '',
-    '五点描述': bulletText,
-    '所有卖点信息': '',
-    '卖点补充': sellingText,
     '违禁词合规红线': complianceText,
-    '商品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}`,
     'ASIN': ctx.asin,
-    '站点': ctx.marketplace,
-    // 兼容旧占位符
-    '标题': ctx.title || '',
-    '品牌': ctx.brand_name || '',
-    '合规红线': complianceText,
-    '五点': bulletText,
-    '卖点': sellingText
+    '站点': ctx.marketplace
   }
 
   if (!template) {
     return `请根据以下竞品资料生成营销图：\n\n【竞品标题】\n${ctx.title || '（无）'}\n\n【竞品品牌名】\n${ctx.brand_name || '（无）'}\n\n【竞品五点描述】\n${bulletText || '（无）'}\n\n【竞品卖点补充】\n${sellingText || '（无）'}\n\n【违禁词合规红线】\n${complianceText || '（无）'}`
   }
 
-  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|商品图片|商品标题|商品品牌名|五点描述|所有卖点信息|卖点补充|违禁词合规红线|商品资料|ASIN|站点|标题|品牌|合规红线|五点|卖点)\}\}/g
+  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|违禁词合规红线|ASIN|站点)\}\}/g
   let resolved = template
   // 多轮替换：支持“违禁词合规红线”字段内部再引用竞品品牌名等变量。
   for (let pass = 0; pass < 4; pass++) {
