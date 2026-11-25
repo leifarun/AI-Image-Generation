@@ -1,33 +1,38 @@
-import dayjs from 'dayjs'
 import { requireSupabase } from '@/api/supabase'
 import { fetchTasks, type TaskRow } from '@/api/tasks'
 import { calcActualCost } from '@/constants/pricing'
 
+export type DashboardTaskFilter =
+  | 'all'
+  | 'queued'
+  | 'processing'
+  | 'succeeded'
+  | 'failed'
+  | 'need_input'
+
 export interface DashboardSummary {
-  todayCreated: number
+  totalTasks: number
   queued: number
   processing: number
-  todayFailed: number
+  totalSucceeded: number
+  totalFailed: number
   totalImages: number
   totalCost: number
-  todayCost: number
   recent: TaskRow[]
 }
 
 /**
  * 工作台汇总数据。
- * 所有数字都来自真实任务视图，搜索/筛选口径不受任务列表页面当前条件影响。
+ * 数字来自全体员工可见的任务视图，不受任务列表页面当前筛选影响。
  */
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   const supabase = requireSupabase()
-  const todayStart = dayjs().startOf('day').toISOString()
 
-  const [todayCreatedResult, queuedResult, processingResult, todayFailedResult, costResult, recentResult] =
+  const [totalResult, queuedResult, processingResult, succeededResult, failedResult, costResult, recentResult] =
     await Promise.all([
       supabase
         .from('task_view')
-        .select('id', { count: 'exact', head: true })
-        .gte('created_at', todayStart),
+        .select('id', { count: 'exact', head: true }),
       supabase
         .from('task_view')
         .select('id', { count: 'exact', head: true })
@@ -35,50 +40,70 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
       supabase
         .from('task_view')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'generating'),
+        .in('status', ['fetching', 'generating']),
       supabase
         .from('task_view')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'failed')
-        .gte('created_at', todayStart),
+        .eq('status', 'succeeded'),
       supabase
         .from('task_view')
-        .select('id, created_at, result_count, result_models'),
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'failed'),
+      supabase
+        .from('task_view')
+        .select('id, result_count, result_models'),
       fetchTasks({ page: 1, pageSize: 8 })
     ])
 
   const firstError =
-    todayCreatedResult.error ||
+    totalResult.error ||
     queuedResult.error ||
     processingResult.error ||
-    todayFailedResult.error ||
+    succeededResult.error ||
+    failedResult.error ||
     costResult.error
   if (firstError) throw new Error(firstError.message)
 
   const costRows = (costResult.data ?? []) as Array<{
-    created_at: string
     result_count: number
     result_models: string[] | null
   }>
   let totalImages = 0
   let totalCost = 0
-  let todayCost = 0
   for (const row of costRows) {
     const count = Number(row.result_count ?? 0)
-    const cost = calcActualCost(row.result_models)
     totalImages += count
-    totalCost += cost
-    if (row.created_at >= todayStart) todayCost += cost
+    totalCost += calcActualCost(row.result_models)
   }
 
   return {
-    todayCreated: todayCreatedResult.count ?? 0,
+    totalTasks: totalResult.count ?? 0,
     queued: queuedResult.count ?? 0,
     processing: processingResult.count ?? 0,
-    todayFailed: todayFailedResult.count ?? 0,
+    totalSucceeded: succeededResult.count ?? 0,
+    totalFailed: failedResult.count ?? 0,
     totalImages,
     totalCost,
-    todayCost,
     recent: recentResult.rows
   }
+}
+
+/** 看板下钻：按状态读取全体任务明细 */
+export async function fetchDashboardTasks(
+  filter: DashboardTaskFilter,
+  pageSize = 100
+): Promise<TaskRow[]> {
+  const statusMap: Record<Exclude<DashboardTaskFilter, 'all'>, string[]> = {
+    queued: ['queued'],
+    processing: ['fetching', 'generating'],
+    succeeded: ['succeeded'],
+    failed: ['failed'],
+    need_input: ['need_input']
+  }
+  const result = await fetchTasks({
+    page: 1,
+    pageSize,
+    statuses: filter === 'all' ? undefined : statusMap[filter]
+  })
+  return result.rows
 }

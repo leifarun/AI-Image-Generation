@@ -33,6 +33,7 @@ export interface TaskListQuery {
   pageSize: number
   asins?: string[]
   status?: string
+  statuses?: string[]
   marketplace?: string
   brand?: string
   creator?: string
@@ -60,6 +61,7 @@ export async function fetchTasks(query: TaskListQuery): Promise<TaskListResult> 
 
   if (query.asins?.length) builder = builder.in('asin', query.asins)
   if (query.status) builder = builder.eq('status', query.status)
+  if (query.statuses?.length) builder = builder.in('status', query.statuses)
   if (query.marketplace) builder = builder.eq('marketplace', query.marketplace)
   if (query.brand) builder = builder.ilike('brand_name', `%${query.brand.trim()}%`)
   if (query.creator) builder = builder.ilike('creator_name', `%${query.creator.trim()}%`)
