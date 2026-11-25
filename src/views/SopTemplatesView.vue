@@ -46,7 +46,8 @@ const placeholders = [
   { key: '{{竞品五点描述}}', desc: '竞品五点描述' },
   { key: '{{竞品卖点补充}}', desc: '竞品卖点补充' },
   { key: '{{违禁词合规红线}}', desc: '违禁词合规红线' },
-  { key: '{{竞品资料}}', desc: '全部竞品资料' }
+  { key: '{{竞品资料}}', desc: '全部竞品资料' },
+  { key: '{{子模板内容}}', desc: '当前子模板内容' }
 ]
 
 const parentTemplates = computed(() =>
@@ -72,6 +73,14 @@ const dialogTitle = computed(() => {
 const isChildMode = computed(
   () => dialogMode.value === 'create_child' || dialogMode.value === 'edit_child'
 )
+const contentPlaceholders = computed(() =>
+  isChildMode.value
+    ? placeholders.filter(
+        (p) => p.key !== '{{子模板内容}}' && p.key !== '{{违禁词合规红线}}'
+      )
+    : placeholders
+)
+const hasSubtemplateVariable = computed(() => form.content.includes('{{子模板内容}}'))
 
 const isMotherTemplate = computed(
   () => !isChildMode.value && Boolean(editingId.value) && childCount(editingId.value ?? '') > 0
@@ -150,7 +159,7 @@ function openCreateChild(source: unknown) {
   Object.assign(form, {
     name: '',
     content: '',
-    compliance_redlines: parent.compliance_redlines ?? '',
+    compliance_redlines: '',
     is_default: false,
     is_active: true,
     image_count: 1,
@@ -175,7 +184,8 @@ const previewSamples: Record<string, string> = {
   '{{竞品五点描述}}': '1. 示例卖点一\n2. 示例卖点二\n3. 示例卖点三',
   '{{竞品卖点补充}}': '示例补充卖点',
   '{{违禁词合规红线}}': '[示例合规要求]',
-  '{{竞品资料}}': '[完整竞品资料示例]'
+  '{{竞品资料}}': '[完整竞品资料示例]',
+  '{{子模板内容}}': '【示例子模板】\n[当前子模板的具体要求]'
 }
 
 function renderPreview(text: string): string {
@@ -196,7 +206,7 @@ async function handleSubmit() {
     const payload: SopTemplateInput = {
       name: form.name,
       content: form.content,
-      compliance_redlines: form.compliance_redlines,
+      compliance_redlines: isChildMode.value ? '' : form.compliance_redlines,
       is_default: isChildMode.value ? false : form.is_default,
       is_active: form.is_active,
       image_count: isChildMode.value ? 1 : form.image_count,
@@ -353,7 +363,7 @@ onMounted(load)
           <el-input v-model="form.name" :placeholder="isChildMode ? '例如：图2 使用场景图' : '例如：主图+附图6张标准版'" />
         </el-form-item>
 
-        <el-form-item label="违禁词合规红线（可选）">
+        <el-form-item v-if="!isChildMode" label="违禁词合规红线（可选）">
           <el-input
             v-model="form.compliance_redlines"
             type="textarea"
@@ -363,7 +373,7 @@ onMounted(load)
           <div class="placeholder-bar">
             <span class="ph-label">红线内可插入变量：</span>
             <el-tag
-              v-for="p in placeholders"
+              v-for="p in contentPlaceholders"
               :key="`redline-${p.key}`"
               class="ph-tag"
               size="small"
@@ -389,7 +399,7 @@ onMounted(load)
           <div class="placeholder-bar">
             <span class="ph-label">可插入变量：</span>
             <el-tag
-              v-for="p in placeholders"
+              v-for="p in contentPlaceholders"
               :key="`content-${p.key}`"
               class="ph-tag"
               size="small"
@@ -398,6 +408,12 @@ onMounted(load)
             >
               {{ p.key }}
             </el-tag>
+          </div>
+          <div
+            v-if="isMotherTemplate && !hasSubtemplateVariable"
+            class="form-tip warning-tip"
+          >
+            母模板包含子模板时，请在需要的位置插入「子模板内容」变量
           </div>
           <div v-if="contentPreview" class="preview-box">
             <span class="ph-label">实时预览：</span>
@@ -461,6 +477,12 @@ onMounted(load)
   margin-left: 10px;
   font-size: 12px;
   color: #909399;
+}
+
+.warning-tip {
+  display: block;
+  margin: 6px 0 0;
+  color: #e6a23c;
 }
 
 .placeholder-bar {

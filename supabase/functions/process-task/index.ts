@@ -205,14 +205,14 @@ async function handleTask(taskId: string): Promise<void> {
     all_selling_points: t.selling_points,
     image_count: imageCount,
     asin: t.asin,
-    marketplace: t.marketplace
+    marketplace: t.marketplace,
+    subtemplate_content: subtemplates
+      .map((s) => `【${s.name}】\n${s.content}`)
+      .join('\n\n')
   }
 
-  // 给管理员看的完整组装预览：母模板 + 所有勾选子模板
-  const overviewTemplate = subtemplates.length
-    ? `${templateContent ?? ''}\n\n${subtemplates.map((s) => `【${s.name}】\n${s.content}`).join('\n\n')}`
-    : templateContent
-  const basePrompt = assemblePrompt(overviewTemplate, ctx)
+  // 给管理员看的完整组装预览：所有勾选子模板通过 {{子模板内容}} 进入母模板
+  const basePrompt = assemblePrompt(templateContent, ctx)
 
   await supabase.from('tasks').update({ prompt_assembled: basePrompt }).eq('id', taskId)
 
@@ -239,10 +239,10 @@ async function handleTask(taskId: string): Promise<void> {
     const index = generated
     console.log(`[task ${taskId}] 生成第 ${index + 1}/${imageCount} 张`)
     const child = subtemplates[index] ?? null
-    const promptTemplate = child
-      ? `${templateContent ?? ''}\n\n${child.content}`
-      : templateContent
-    const promptBase = assemblePrompt(promptTemplate, ctx)
+    const promptBase = assemblePrompt(templateContent, {
+      ...ctx,
+      subtemplate_content: child?.content ?? ''
+    })
     const prompt = `${promptBase}\n\n（本次只生成第 ${index + 1}/${imageCount} 张图，对应图序：${child?.name ?? `图${index + 1}`}，请严格按照上面规则执行）`
     // 由函数自己下载参考图并转为 Base64：
     // 避免豆包侧直接请求 Amazon 图片域名时偶发下载超时。
@@ -329,6 +329,7 @@ function assemblePrompt(
     image_count: number
     asin: string
     marketplace: string
+    subtemplate_content: string
   }
 ): string {
   const imageText = (ctx.images || []).filter(Boolean).join('\n')
@@ -347,6 +348,7 @@ function assemblePrompt(
     '竞品五点描述': bulletText,
     '竞品卖点补充': sellingText,
     '竞品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}`,
+    '子模板内容': ctx.subtemplate_content || '',
     '违禁词合规红线': complianceText,
     'ASIN': ctx.asin,
     '站点': ctx.marketplace
@@ -356,7 +358,7 @@ function assemblePrompt(
     return `请根据以下竞品资料生成营销图：\n\n【竞品标题】\n${ctx.title || '（无）'}\n\n【竞品品牌名】\n${ctx.brand_name || '（无）'}\n\n【竞品五点描述】\n${bulletText || '（无）'}\n\n【竞品卖点补充】\n${sellingText || '（无）'}\n\n【违禁词合规红线】\n${complianceText || '（无）'}`
   }
 
-  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|违禁词合规红线|ASIN|站点)\}\}/g
+  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|子模板内容|违禁词合规红线|ASIN|站点)\}\}/g
   let resolved = template
   // 多轮替换：支持“违禁词合规红线”字段内部再引用竞品品牌名等变量。
   for (let pass = 0; pass < 4; pass++) {
