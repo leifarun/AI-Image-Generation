@@ -5,4 +5,5 @@ dist/
 .workbuddy/
 work/
 outputs/
+supabase/.temp/
 .DS_Store

@@ -150,7 +150,7 @@ export async function deleteTask(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-/** 待补充状态：补填商品资料 */
+/** 待补充状态：补填竞品资料 */
 export async function supplementTask(
   id: string,
   data: {
@@ -174,7 +174,7 @@ export async function supplementTask(
   if (error) throw new Error(error.message)
 }
 
-/** 编辑商品资料（等待输出前、失败/成功后重新生成前均可） */
+/** 编辑竞品资料（等待输出前、失败/成功后重新生成前均可） */
 export async function updateTaskProductData(
   id: string,
   data: {

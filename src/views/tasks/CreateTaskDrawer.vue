@@ -119,7 +119,7 @@ async function handleSubmit() {
       template_id: form.template_id,
       subtemplate_ids: selectedChildren.value.length ? form.subtemplate_ids : []
     })
-    ElMessage.success('任务已提交，系统将自动抓取商品资料')
+    ElMessage.success('任务已提交，系统将自动抓取竞品资料')
     emit('created')
     handleClose()
   } catch (e) {
@@ -169,15 +169,15 @@ watch(
         </el-select>
       </el-form-item>
 
-      <el-form-item label="卖点补充（可选，每行一条）" prop="selling_points">
+      <el-form-item label="竞品卖点补充（可选，每行一条）" prop="selling_points">
         <el-input
           v-model="form.selling_points"
           type="textarea"
           :rows="5"
-          placeholder="填写需要补充或重点强调的卖点，例如：&#10;加厚防滑&#10;兼容多种墙面&#10;安装无需专业工具"
+          placeholder="填写竞品需要补充或重点强调的卖点，例如：&#10;加厚防滑&#10;兼容多种墙面&#10;安装无需专业工具"
         />
         <div class="field-hint">
-          这里只填写额外卖点、差异点或需要强调的信息。AI 会结合母模板和本次勾选的子模板统一使用，不需要按图片数量逐条对应。
+          这里只填写竞品的额外卖点、差异点或需要强调的信息。AI 会结合母模板和本次勾选的子模板统一使用，不需要按图片数量逐条对应。
         </div>
       </el-form-item>
 

@@ -74,7 +74,7 @@ async function submitSupplement() {
       product_bullets: bullets,
       product_images: images
     })
-    ElMessage.success('资料已补充')
+    ElMessage.success('竞品资料已补充')
     showSupplement.value = false
     load()
   } catch (e) {
@@ -127,7 +127,7 @@ onMounted(load)
           <el-button size="small" @click="router.back()">返回</el-button>
           <span class="title">任务详情</span>
           <div class="head-actions">
-            <el-button v-if="detail.status === 'need_input'" type="primary" size="small" @click="openSupplement">补充资料</el-button>
+            <el-button v-if="detail.status === 'need_input'" type="primary" size="small" @click="openSupplement">补充竞品资料</el-button>
             <el-button
               v-if="['failed', 'succeeded', 'need_input'].includes(detail.status)"
               type="warning"
@@ -150,23 +150,23 @@ onMounted(load)
         <el-descriptions-item label="当前状态">
           <StatusTag :status="detail.status" />
         </el-descriptions-item>
-        <el-descriptions-item label="卖点说明" :span="2">{{ detail.selling_points || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="竞品卖点补充" :span="2">{{ detail.selling_points || '—' }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.error_message" label="失败原因" :span="2">
           <span class="error-text">{{ detail.error_message }}</span>
         </el-descriptions-item>
       </el-descriptions>
 
-      <el-divider content-position="left">商品资料</el-divider>
+      <el-divider content-position="left">竞品资料</el-divider>
       <el-descriptions :column="1" border size="small">
-        <el-descriptions-item label="商品标题">{{ detail.product_title || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="商品品牌名">{{ detail.brand_name || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="五点描述">
+        <el-descriptions-item label="竞品标题">{{ detail.product_title || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="竞品品牌名">{{ detail.brand_name || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="竞品五点描述">
           <div v-if="detail.product_bullets?.length">
             <div v-for="(b, i) in detail.product_bullets" :key="i">{{ i + 1 }}. {{ b }}</div>
           </div>
           <span v-else>—</span>
         </el-descriptions-item>
-        <el-descriptions-item label="商品图片 URL">
+        <el-descriptions-item label="竞品图片 URL">
           <div v-if="detail.product_images?.length" class="image-url-list">
             <div v-for="(url, i) in detail.product_images" :key="i" class="image-url-row">
               <span class="image-url-index">{{ i + 1 }}.</span>
@@ -201,18 +201,18 @@ onMounted(load)
     </el-card>
 
     <!-- 补充资料弹窗 -->
-    <el-dialog v-model="showSupplement" title="补充商品资料" width="560px">
+    <el-dialog v-model="showSupplement" title="补充竞品资料" width="560px">
       <el-form label-position="top">
-        <el-form-item label="商品标题">
-          <el-input v-model="supplementForm.product_title" placeholder="粘贴商品标题" />
+        <el-form-item label="竞品标题">
+          <el-input v-model="supplementForm.product_title" placeholder="粘贴竞品标题" />
         </el-form-item>
-        <el-form-item label="商品品牌名">
-          <el-input v-model="supplementForm.brand_name" placeholder="粘贴商品品牌名" />
+        <el-form-item label="竞品品牌名">
+          <el-input v-model="supplementForm.brand_name" placeholder="粘贴竞品品牌名" />
         </el-form-item>
-        <el-form-item label="五点描述（每行一条）">
+        <el-form-item label="竞品五点描述（每行一条）">
           <el-input v-model="supplementForm.product_bullets_text" type="textarea" :rows="6" placeholder="每行一条卖点" />
         </el-form-item>
-        <el-form-item label="商品图片链接（每行一个）">
+        <el-form-item label="竞品图片链接（每行一个）">
           <el-input v-model="supplementForm.product_images_text" type="textarea" :rows="3" placeholder="每行一个图片 URL" />
         </el-form-item>
       </el-form>

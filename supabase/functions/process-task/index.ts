@@ -193,7 +193,7 @@ async function handleTask(taskId: string): Promise<void> {
     }
   }
 
-  // 4. 组装 AI 指令（完整商品资料 + 完整生成规则，一次看全，不再重复）
+  // 4. 组装 AI 指令（完整竞品资料 + 完整生成规则，一次看全，不再重复）
   const imageCount = Math.max(1, subtemplates.length || t.image_count || 1)
 
   const ctx = {
@@ -340,6 +340,13 @@ function assemblePrompt(
   // 占位符 → 真实数据（模板里出现的 {{xxx}} 会被替换）
   const data: Record<string, string> = {
     '图片数量': String(ctx.image_count),
+    '竞品图片': imageText,
+    '竞品标题': ctx.title || '',
+    '竞品品牌名': ctx.brand_name || '',
+    '竞品五点描述': bulletText,
+    '竞品卖点补充': sellingText,
+    '竞品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}\n【违禁词合规红线】\n${complianceText}`,
+    // 兼容 v0.1.2 及更早模板中的旧占位符
     '商品图片': imageText,
     '商品标题': ctx.title || '',
     '商品品牌名': ctx.brand_name || '',
@@ -347,7 +354,7 @@ function assemblePrompt(
     '所有卖点信息': '',
     '卖点补充': sellingText,
     '违禁词合规红线': complianceText,
-    '商品资料': `【商品图片】\n${imageText}\n【商品标题】\n${ctx.title || ''}\n【商品品牌名】\n${ctx.brand_name || ''}\n【五点描述】\n${bulletText}\n【所有卖点信息】\n（由豆包自行提取）\n【卖点补充】\n${sellingText}\n【违禁词合规红线】\n${complianceText}`,
+    '商品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}\n【违禁词合规红线】\n${complianceText}`,
     'ASIN': ctx.asin,
     '站点': ctx.marketplace,
     // 兼容旧占位符
@@ -359,10 +366,10 @@ function assemblePrompt(
   }
 
   if (!template) {
-    return `请根据以下商品资料生成营销图：\n\n【商品标题】\n${ctx.title || '（无）'}\n\n【商品品牌名】\n${ctx.brand_name || '（无）'}\n\n【五点描述】\n${bulletText || '（无）'}\n\n【所有卖点信息】\n${sellingText || '（无）'}\n\n【违禁词合规红线】\n${complianceText || '（无）'}`
+    return `请根据以下竞品资料生成营销图：\n\n【竞品标题】\n${ctx.title || '（无）'}\n\n【竞品品牌名】\n${ctx.brand_name || '（无）'}\n\n【竞品五点描述】\n${bulletText || '（无）'}\n\n【竞品卖点补充】\n${sellingText || '（无）'}\n\n【违禁词合规红线】\n${complianceText || '（无）'}`
   }
 
-  const variablePattern = /\{\{(图片数量|商品图片|商品标题|商品品牌名|五点描述|所有卖点信息|卖点补充|违禁词合规红线|商品资料|ASIN|站点|标题|品牌|合规红线|五点|卖点)\}\}/g
+  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|商品图片|商品标题|商品品牌名|五点描述|所有卖点信息|卖点补充|违禁词合规红线|商品资料|ASIN|站点|标题|品牌|合规红线|五点|卖点)\}\}/g
   let resolved = template
   // 多轮替换：支持“违禁词合规红线”字段内部再引用商品品牌名等变量。
   for (let pass = 0; pass < 4; pass++) {

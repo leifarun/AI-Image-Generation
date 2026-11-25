@@ -92,7 +92,7 @@ async function save() {
         .map((s) => s.trim())
         .filter(Boolean)
     })
-    ElMessage.success('商品资料已保存')
+    ElMessage.success('竞品资料已保存')
     visible.value = false
     emit('saved')
   } catch (e) {
@@ -104,28 +104,28 @@ async function save() {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="商品资料" width="680px">
+  <el-dialog v-model="visible" title="竞品资料" width="680px">
     <div class="edit-tip">
-      {{ editable ? '可编辑商品品牌名、标题、五点描述与图片 URL；保存后“重做”会按最新资料重新生成。' : '任务正在处理中，当前仅可查看，不可编辑。' }}
+      {{ editable ? '可编辑竞品品牌名、标题、五点描述与图片 URL；保存后“重做”会按最新竞品资料重新生成。' : '任务正在处理中，当前仅可查看，不可编辑。' }}
     </div>
 
     <el-form label-position="top" :disabled="!editable">
-      <el-form-item label="商品品牌名">
+      <el-form-item label="竞品品牌名">
         <el-input v-model="brand" placeholder="后台自动抓取，可在此修正" />
       </el-form-item>
 
-      <el-form-item label="商品标题">
-        <el-input v-model="title" type="textarea" :rows="3" placeholder="商品标题" />
+      <el-form-item label="竞品标题">
+        <el-input v-model="title" type="textarea" :rows="3" placeholder="竞品标题" />
       </el-form-item>
 
-      <el-form-item label="五点描述（每行一条）">
+      <el-form-item label="竞品五点描述（每行一条）">
         <el-input v-model="bulletsText" type="textarea" :rows="7" placeholder="每行一条五点描述" />
       </el-form-item>
 
       <el-form-item>
         <template #label>
           <div class="label-row">
-            <span>商品图片 URL（每行一个）</span>
+            <span>竞品图片 URL（每行一个）</span>
             <el-button
               v-if="editable"
               size="small"

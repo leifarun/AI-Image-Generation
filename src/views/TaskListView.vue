@@ -128,7 +128,7 @@ async function openResults(row: TaskRow) {
 async function handleRetry(row: TaskRow) {
   try {
     await ElMessageBox.confirm(
-      `确定重做该任务（ASIN: ${row.asin}）吗？将按最新商品资料重新生成图片，可能产生模型调用费用。`,
+      `确定重做该任务（ASIN: ${row.asin}）吗？将按最新竞品资料重新生成图片，可能产生模型调用费用。`,
       '重做确认',
       { type: 'warning' }
     )
@@ -171,10 +171,10 @@ const gridOptions = reactive<VxeGridProps>({
     { field: 'creator_name', title: '提交人', width: 100 },
     { field: 'asin', title: 'ASIN', width: 130 },
     { field: 'marketplace', title: '站点', width: 70 },
-    { field: 'selling_points', title: '卖点补充', minWidth: 170, showOverflow: true },
+    { field: 'selling_points', title: '竞品卖点补充', minWidth: 180, showOverflow: true },
     { field: 'template_name', title: '模板', minWidth: 120, showOverflow: true },
     { title: '组装后的 AI 指令', width: 160, slots: { default: 'prompt' } },
-    { title: '商品资料', width: 110, slots: { default: 'product' } },
+    { title: '竞品资料', width: 110, slots: { default: 'product' } },
     {
       field: 'status',
       title: '当前状态',
