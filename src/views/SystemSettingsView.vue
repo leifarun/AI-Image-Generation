@@ -8,6 +8,7 @@ import {
   type SystemSettings
 } from '@/api/settings'
 import { MARKETPLACE_OPTIONS, formatMarketplaceLabel } from '@/constants/marketplace'
+import { DOUBAO_IMAGE_PRICES } from '@/constants/pricing'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -92,11 +93,6 @@ onMounted(load)
           <span class="form-tip">建议先保持 2，确认豆包账号限流后再调高</span>
         </el-form-item>
 
-        <el-form-item label="每分钟豆包请求上限">
-          <el-input-number v-model="form.max_requests_per_minute" :min="1" :max="600" />
-          <span class="form-tip">参数已保存；当前版本主要由任务并发上限控制实际请求节奏</span>
-        </el-form-item>
-
         <el-divider content-position="left">生成与超时</el-divider>
 
         <el-form-item label="单张生成超时">
@@ -127,6 +123,28 @@ onMounted(load)
           </el-select>
           <div class="field-help">
             填写火山方舟模型广场显示的完整模型 ID。任务处理器会自动读取这里的值，保存后无需重新部署云端函数。
+          </div>
+          <div class="model-pricing">
+            <div class="model-pricing-title">站内可选模型收费标准（元/张）</div>
+            <div class="price-row price-head">
+              <span>模型名称</span>
+              <span>输入图单价</span>
+              <span>输出图单价</span>
+              <span>说明</span>
+            </div>
+            <div
+              v-for="item in DOUBAO_IMAGE_PRICES"
+              :key="item.modelId"
+              class="price-row"
+            >
+              <span>{{ item.label }}</span>
+              <span>{{ item.inputPrice > 0 ? item.inputPrice.toFixed(2) : '免费' }}</span>
+              <span>{{ item.outputPrice.toFixed(2) }}</span>
+              <span>{{ item.inputFirstFree ? '首张输入图免费' : '' }}</span>
+            </div>
+            <div class="pricing-note">
+              输出单价按 1600×1600 档位列出；更改分辨率后，预计费用按面积比例估算，实际以火山方舟账单为准。
+            </div>
           </div>
         </el-form-item>
 
@@ -204,10 +222,9 @@ onMounted(load)
             v-model="form.marketplaces"
             multiple
             filterable
-            allow-create
             default-first-option
             class="marketplace-select"
-            placeholder="输入站点代码"
+            placeholder="选择支持的站点"
           >
             <el-option
               v-for="item in MARKETPLACE_OPTIONS"
@@ -242,6 +259,7 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-width: 960px;
 }
 
 .card-head {
@@ -262,6 +280,46 @@ onMounted(load)
   font-size: 12px;
   line-height: 1.6;
   color: #909399;
+}
+
+.model-pricing {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.model-pricing-title {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  background: #f5f7fa;
+}
+
+.price-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr 0.9fr 1.2fr;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: #606266;
+  border-top: 1px solid #ebeef5;
+}
+
+.price-head {
+  color: #909399;
+  font-size: 12px;
+  background: #fafafa;
+}
+
+.pricing-note {
+  padding: 7px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #909399;
+  border-top: 1px solid #ebeef5;
 }
 
 .model-select {
@@ -286,5 +344,16 @@ onMounted(load)
   margin-top: 8px;
   font-size: 12px;
   color: #67a23a;
+}
+
+@media (max-width: 860px) {
+  :deep(.el-form-item__label) {
+    width: 100% !important;
+    text-align: left;
+  }
+
+  .price-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 </style>

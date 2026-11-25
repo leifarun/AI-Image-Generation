@@ -6,6 +6,7 @@ import { createTask, uploadReferenceImage } from '@/api/tasks'
 import { fetchActiveTemplates, type SopTemplateRow } from '@/api/sop'
 import {
   fetchDefaultDoubaoModel,
+  fetchOutputResolution,
   fetchReferenceImageLimit,
   fetchSupportedMarketplaces
 } from '@/api/settings'
@@ -27,6 +28,8 @@ const uploading = ref(false)
 const templates = ref<SopTemplateRow[]>([])
 const defaultModelId = ref('')
 const referenceImageLimit = ref(MAX_REFERENCE_IMAGES)
+const outputWidth = ref(1600)
+const outputHeight = ref(1600)
 const supportedMarketplaces = ref<string[]>([])
 const manualProductOpen = ref<string[]>([])
 
@@ -79,7 +82,13 @@ const imageCount = computed(() => {
 })
 
 const costEstimate = computed(() =>
-  estimateTaskCost(defaultModelId.value, imageCount.value, referenceImageLimit.value)
+  estimateTaskCost(
+    defaultModelId.value,
+    imageCount.value,
+    referenceImageLimit.value,
+    outputWidth.value,
+    outputHeight.value
+  )
 )
 
 const costText = computed(() => {
@@ -132,6 +141,12 @@ async function loadMarketplaces() {
 
 async function loadReferenceImageLimit() {
   referenceImageLimit.value = await fetchReferenceImageLimit()
+}
+
+async function loadOutputResolution() {
+  const resolution = await fetchOutputResolution()
+  outputWidth.value = resolution.width
+  outputHeight.value = resolution.height
 }
 
 async function handleFiles(event: Event) {
@@ -230,6 +245,7 @@ watch(
     void loadDefaultModel()
     void loadMarketplaces()
     void loadReferenceImageLimit()
+    void loadOutputResolution()
   },
   { immediate: true }
 )
@@ -239,7 +255,7 @@ watch(
   <el-drawer
     :model-value="props.modelValue"
     title="新建生成任务"
-    size="480px"
+    size="560px"
     @close="handleClose"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
@@ -376,7 +392,7 @@ watch(
           </el-tag>
         </div>
         <div class="field-hint">
-          按 1600×1600 输出、每张最多发送 {{ referenceImageLimit }} 张参考图估算；
+          按 {{ outputWidth }}×{{ outputHeight }} 输出、每张最多发送 {{ referenceImageLimit }} 张参考图估算；
           区间下限为无参考图，上限为带满参考图。仅作参考，实际以火山方舟账单为准。
         </div>
       </el-form-item>

@@ -101,14 +101,22 @@ export interface TaskCostEstimate {
 export function estimateTaskCost(
   modelId: string | null | undefined,
   imageCount: number,
-  referenceCount = 0
+  referenceCount = 0,
+  outputWidth = 1600,
+  outputHeight = 1600
 ): TaskCostEstimate {
   const price = getDoubaoImagePrice(modelId)
   const count = Math.max(0, imageCount)
   const referenceMax = Math.min(referenceCount || MAX_REFERENCE_IMAGES, MAX_REFERENCE_IMAGES)
+  const referencePixels = 1600 * 1600
+  const outputPixels = Math.max(0, outputWidth) * Math.max(0, outputHeight)
+  const sizeFactor = outputPixels > 0
+    ? Math.max(0.25, Math.round((outputPixels / referencePixels) * 100) / 100)
+    : 1
+  const outputPrice = roundMoney(price.outputPrice * sizeFactor)
 
-  const perImageMin = price.outputPrice
-  const perImageMax = price.outputPrice + calcReferenceInputCost(price, referenceMax)
+  const perImageMin = outputPrice
+  const perImageMax = outputPrice + calcReferenceInputCost(price, referenceMax)
 
   return {
     perImageMin: roundMoney(perImageMin),

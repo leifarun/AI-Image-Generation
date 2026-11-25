@@ -3,7 +3,6 @@ import { FALLBACK_DOUBAO_MODEL_ID } from '@/constants/pricing'
 
 export interface SystemSettings {
   max_concurrent_tasks: number
-  max_requests_per_minute: number
   default_doubao_model: string
   marketplaces: string[]
   doubao_request_timeout_seconds: number
@@ -19,7 +18,6 @@ export interface SystemSettings {
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   max_concurrent_tasks: 2,
-  max_requests_per_minute: 10,
   default_doubao_model: 'doubao-seedream-4-5-251128',
   marketplaces: ['US', 'UK', 'DE', 'JP', 'CA', 'FR', 'IT', 'ES', 'AU', 'AE', 'SA'],
   doubao_request_timeout_seconds: 130,
@@ -52,10 +50,6 @@ export async function fetchSystemSettings(): Promise<SystemSettings> {
     max_concurrent_tasks: toPositiveInt(
       values.max_concurrent_tasks,
       DEFAULT_SYSTEM_SETTINGS.max_concurrent_tasks
-    ),
-    max_requests_per_minute: toPositiveInt(
-      values.max_requests_per_minute,
-      DEFAULT_SYSTEM_SETTINGS.max_requests_per_minute
     ),
     default_doubao_model:
       typeof values.default_doubao_model === 'string' && values.default_doubao_model.trim()
@@ -158,12 +152,41 @@ export async function fetchReferenceImageLimit(): Promise<number> {
   )
 }
 
+/** 读取当前输出分辨率，供新建任务估算成本 */
+export async function fetchOutputResolution(): Promise<{ width: number; height: number }> {
+  const supabase = requireSupabase()
+
+  const direct = await supabase
+    .from('system_settings')
+    .select('key,value')
+    .in('key', ['output_width', 'output_height'])
+  if (!direct.error && direct.data?.length) {
+    const values = Object.fromEntries(
+      direct.data.map((row: { key: string; value: unknown }) => [row.key, row.value])
+    )
+    const width = toNumberInRange(values.output_width, 512, 4096, DEFAULT_SYSTEM_SETTINGS.output_width)
+    const height = toNumberInRange(values.output_height, 512, 4096, DEFAULT_SYSTEM_SETTINGS.output_height)
+    if (width && height) return { width, height }
+  }
+
+  const { data, error } = await supabase.rpc('get_output_resolution')
+  if (error || !data) {
+    return {
+      width: DEFAULT_SYSTEM_SETTINGS.output_width,
+      height: DEFAULT_SYSTEM_SETTINGS.output_height
+    }
+  }
+  return {
+    width: toNumberInRange(data.width, 512, 4096, DEFAULT_SYSTEM_SETTINGS.output_width),
+    height: toNumberInRange(data.height, 512, 4096, DEFAULT_SYSTEM_SETTINGS.output_height)
+  }
+}
+
 /** 逐项保存管理员的运行参数 */
 export async function saveSystemSettings(settings: SystemSettings): Promise<void> {
   const supabase = requireSupabase()
   const entries: Array<[keyof SystemSettings, SystemSettings[keyof SystemSettings]]> = [
     ['max_concurrent_tasks', settings.max_concurrent_tasks],
-    ['max_requests_per_minute', settings.max_requests_per_minute],
     ['default_doubao_model', settings.default_doubao_model.trim()],
     ['marketplaces', settings.marketplaces],
     ['doubao_request_timeout_seconds', settings.doubao_request_timeout_seconds],

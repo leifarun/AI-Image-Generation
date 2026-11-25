@@ -138,7 +138,7 @@ async function processQueue(): Promise<number> {
 }
 
 // 自愈：把卡在 generating 超过 4 分钟的任务重置回 queued。
-// 必须留出 130 秒豆包请求超时和约 20 秒图片准备/转存时间，避免仍在运行的任务被重复领取。
+// 4 分钟覆盖当前可配置的最大超时和图片准备/转存时间，避免仍在运行的任务被重复领取。
 async function healStuckTasks(): Promise<void> {
   const cutoff = new Date(Date.now() - 4 * 60 * 1000).toISOString()
   const { error } = await supabase.from('tasks').update({ status: 'queued', error_message: null })
@@ -336,7 +336,7 @@ async function handleTask(taskId: string): Promise<void> {
     }
   } catch (e) {
     console.error(`[task ${taskId}] 豆包生成失败:`, e)
-    if (e instanceof Error && e.message.includes(`请求超时（${DOUBAO_REQUEST_TIMEOUT_MS}ms）`)) {
+    if (e instanceof Error && e.message.includes(`请求超时（${runtimeSettings.timeoutMs}ms）`)) {
       await failTask(taskId, `豆包生成失败：${e.message}`)
       return
     }
@@ -442,15 +442,6 @@ async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
 function numberInRange(value: unknown, min: number, max: number, fallback: number): number {
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : fallback
-}
-
-// 把卖点说明按行拆成数组
-function parseSellingPoints(text: string): string[] {
-  if (!text) return []
-  return text
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
 }
 
 // ---------- 组装指令（纯占位符替换，结构完全由模板决定） ----------
@@ -708,7 +699,7 @@ async function callDoubao(
   return url
 }
 
-// 下载全部竞品参考图，压到最长边 800px 后转为 JPEG Base64；最多 9 张
+// 下载全部竞品参考图，按配置缩放并转为 JPEG Base64；数量与尺寸均由运行设置控制
 async function prepareReferenceImages(
   urls: string[] | null,
   taskId: string,
@@ -855,7 +846,7 @@ async function saveImageToStorage(
 }
 
 async function encodeJpegWithinSizeLimit(image: Image, maxBytes: number): Promise<Uint8Array> {
-  // 优先保持画质；只有实际超过 2MB 时才逐档降低 JPEG 质量。
+  // 优先保持画质；只有实际超过配置的体积上限时才逐档降低 JPEG 质量。
   for (const quality of [92, 88, 84, 80, 76, 72, 68, 64, 60, 55, 50, 45, 40]) {
     const encoded = await image.encodeJPEG({
       quality,
