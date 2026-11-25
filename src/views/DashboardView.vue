@@ -6,6 +6,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { fetchDashboardSummary, type DashboardSummary } from '@/api/dashboard'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/datetime'
+import { formatMoney } from '@/constants/pricing'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -15,6 +16,9 @@ const summary = ref<DashboardSummary>({
   queued: 0,
   processing: 0,
   todayFailed: 0,
+  totalImages: 0,
+  totalCost: 0,
+  todayCost: 0,
   recent: []
 })
 
@@ -22,7 +26,9 @@ const stats = computed(() => [
   { label: '今日生成', value: summary.value.todayCreated, tone: 'blue' },
   { label: '排队中', value: summary.value.queued, tone: 'amber' },
   { label: '处理中', value: summary.value.processing, tone: 'green' },
-  { label: '今日失败', value: summary.value.todayFailed, tone: 'red' }
+  { label: '今日失败', value: summary.value.todayFailed, tone: 'red' },
+  { label: '累计出图', value: summary.value.totalImages, tone: 'blue' },
+  { label: '累计成本', value: formatMoney(summary.value.totalCost), tone: 'green' }
 ])
 
 async function loadData() {
@@ -50,7 +56,7 @@ onMounted(loadData)
     </div>
 
     <el-row :gutter="12">
-      <el-col v-for="s in stats" :key="s.label" :span="6">
+      <el-col v-for="s in stats" :key="s.label" :span="4">
         <el-card shadow="never" class="stat-card" :class="`tone-${s.tone}`">
           <div class="stat-label">{{ s.label }}</div>
           <div class="stat-value">{{ s.value }}</div>

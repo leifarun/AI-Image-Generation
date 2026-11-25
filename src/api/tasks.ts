@@ -17,6 +17,8 @@ export interface TaskRow {
   error_message: string | null
   retry_count: number
   image_count: number
+  result_count: number
+  result_models: string[] | null
   created_by: string
   created_at: string
   updated_at: string
@@ -32,6 +34,8 @@ export interface TaskListQuery {
   asins?: string[]
   status?: string
   marketplace?: string
+  brand?: string
+  creator?: string
   from?: string
   to?: string
   sortField?: string
@@ -57,6 +61,8 @@ export async function fetchTasks(query: TaskListQuery): Promise<TaskListResult> 
   if (query.asins?.length) builder = builder.in('asin', query.asins)
   if (query.status) builder = builder.eq('status', query.status)
   if (query.marketplace) builder = builder.eq('marketplace', query.marketplace)
+  if (query.brand) builder = builder.ilike('brand_name', `%${query.brand.trim()}%`)
+  if (query.creator) builder = builder.ilike('creator_name', `%${query.creator.trim()}%`)
   if (query.from) builder = builder.gte('created_at', query.from)
   if (query.to) builder = builder.lte('created_at', query.to)
 

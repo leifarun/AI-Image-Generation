@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleClose, Search } from '@element-plus/icons-vue'
 import type { VxeGridProps, VxeGridInstance } from 'vxe-table'
+import dayjs from 'dayjs'
 import {
   fetchTasks,
   fetchTaskDetail,
@@ -10,7 +11,9 @@ import {
   retryTask,
   type TaskRow
 } from '@/api/tasks'
-import { TASK_STATUS_LIST } from '@/constants/task'
+import { TASK_STATUS_LIST, getStatusLabel } from '@/constants/task'
+import { MARKETPLACE_OPTIONS, formatMarketplaceLabel } from '@/constants/marketplace'
+import { calcActualCost, formatMoney } from '@/constants/pricing'
 import { formatDateTime } from '@/utils/datetime'
 import { useUserStore } from '@/stores/user'
 import CreateTaskDrawer from '@/views/tasks/CreateTaskDrawer.vue'
@@ -25,6 +28,9 @@ const gridRef = ref<VxeGridInstance>()
 const filters = reactive({
   asin: '',
   status: '',
+  marketplace: '',
+  brand: '',
+  creator: '',
   dateRange: [] as string[]
 })
 
@@ -57,6 +63,9 @@ async function loadData() {
       pageSize: page.size,
       asins: parsedAsins.value.length ? parsedAsins.value : undefined,
       status: filters.status || undefined,
+      marketplace: filters.marketplace || undefined,
+      brand: filters.brand.trim() || undefined,
+      creator: filters.creator.trim() || undefined,
       from: filters.dateRange[0] ? new Date(filters.dateRange[0]).toISOString() : undefined,
       to: filters.dateRange[1] ? new Date(filters.dateRange[1]).toISOString() : undefined
     })
@@ -81,9 +90,61 @@ function handleSearch() {
 function handleReset() {
   filters.asin = ''
   filters.status = ''
+  filters.marketplace = ''
+  filters.brand = ''
+  filters.creator = ''
   filters.dateRange = []
   page.current = 1
   loadData()
+}
+
+function progressText(row: TaskRow): string {
+  const done = Number(row.result_count ?? 0)
+  const total = Math.max(1, Number(row.image_count ?? 0))
+  return `${done}/${total}`
+}
+
+async function exportCsv() {
+  try {
+    const result = await fetchTasks({
+      page: 1,
+      pageSize: 1000,
+      asins: parsedAsins.value.length ? parsedAsins.value : undefined,
+      status: filters.status || undefined,
+      marketplace: filters.marketplace || undefined,
+      brand: filters.brand.trim() || undefined,
+      creator: filters.creator.trim() || undefined,
+      from: filters.dateRange[0] ? new Date(filters.dateRange[0]).toISOString() : undefined,
+      to: filters.dateRange[1] ? new Date(filters.dateRange[1]).toISOString() : undefined
+    })
+    const header = ['ASIN', '站点', '竞品品牌', '竞品标题', '模板', '提交人', '状态', '进度', '实际成本', '提交时间', '失败原因']
+    const body = result.rows.map((r) => [
+      r.asin,
+      r.marketplace,
+      r.brand_name ?? '',
+      r.product_title ?? '',
+      r.template_name ?? '',
+      r.creator_name ?? '',
+      getStatusLabel(r.status),
+      progressText(r),
+      calcActualCost(r.result_models).toFixed(2),
+      formatDateTime(r.created_at),
+      r.error_message ?? ''
+    ])
+    const csv = [header, ...body]
+      .map((cells) => cells.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n')
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `任务导出-${dayjs().format('YYYYMMDD-HHmm')}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success(`已导出 ${result.rows.length} 条任务`)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '导出失败')
+  }
 }
 
 async function handleDelete(row: TaskRow) {
@@ -173,6 +234,8 @@ const gridOptions = reactive<VxeGridProps>({
     { field: 'marketplace', title: '站点', width: 70 },
     { field: 'selling_points', title: '竞品卖点补充', minWidth: 180, showOverflow: true },
     { field: 'template_name', title: '模板', minWidth: 120, showOverflow: true },
+    { title: '进度', width: 90, slots: { default: 'progress' } },
+    { title: '实际成本', width: 100, slots: { default: 'cost' } },
     { title: '组装后的 AI 指令', width: 160, slots: { default: 'prompt' } },
     { title: '竞品资料', width: 110, slots: { default: 'product' } },
     {
@@ -246,6 +309,37 @@ const gridOptions = reactive<VxeGridProps>({
           </el-select>
         </div>
 
+        <el-select
+          v-model="filters.marketplace"
+          placeholder="站点"
+          clearable
+          filterable
+          class="marketplace-filter"
+        >
+          <el-option
+            v-for="o in MARKETPLACE_OPTIONS"
+            :key="o.code"
+            :value="o.code"
+            :label="formatMarketplaceLabel(o.code)"
+          />
+        </el-select>
+
+        <el-input
+          v-model="filters.brand"
+          class="brand-filter"
+          placeholder="竞品品牌"
+          clearable
+          @keyup.enter="handleSearch"
+        />
+
+        <el-input
+          v-model="filters.creator"
+          class="creator-filter"
+          placeholder="提交人"
+          clearable
+          @keyup.enter="handleSearch"
+        />
+
         <div class="date-wrap">
           <el-date-picker
             v-model="filters.dateRange"
@@ -259,6 +353,7 @@ const gridOptions = reactive<VxeGridProps>({
         </div>
 
         <el-button class="reset-button" @click="handleReset">重置</el-button>
+        <el-button class="export-button" @click="exportCsv">导出 CSV</el-button>
         <el-button type="primary" class="create-button" @click="createDrawerVisible = true">新建任务</el-button>
       </div>
 
@@ -272,6 +367,14 @@ const gridOptions = reactive<VxeGridProps>({
       >
         <template #status="{ row }">
           <StatusTag :status="row.status" />
+        </template>
+        <template #progress="{ row }">
+          <span :class="{ 'progress-done': row.result_count >= row.image_count }">
+            {{ progressText(row) }}
+          </span>
+        </template>
+        <template #cost="{ row }">
+          {{ formatMoney(calcActualCost(row.result_models)) }}
         </template>
         <template #prompt="{ row }">
           <el-button v-if="isAdmin" link type="primary" size="small" @click="openPrompt(row)">查看</el-button>
@@ -373,6 +476,17 @@ const gridOptions = reactive<VxeGridProps>({
   flex-shrink: 0;
 }
 
+.marketplace-filter {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.brand-filter,
+.creator-filter {
+  width: 130px;
+  flex-shrink: 0;
+}
+
 .date-wrap {
   width: 210px;
   min-width: 0;
@@ -393,8 +507,13 @@ const gridOptions = reactive<VxeGridProps>({
 }
 
 .reset-button,
+.export-button,
 .create-button {
   flex-shrink: 0;
+}
+
+.progress-done {
+  color: #67c23a;
 }
 
 .create-button {

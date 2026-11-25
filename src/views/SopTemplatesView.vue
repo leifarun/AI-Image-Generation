@@ -167,6 +167,28 @@ function insertPlaceholder(
   form[target] += key
 }
 
+const previewSamples: Record<string, string> = {
+  '{{图片数量}}': '3',
+  '{{竞品图片}}': '[示例竞品图片 1]\n[示例竞品图片 2]',
+  '{{竞品标题}}': '示例竞品标题（Demo Competitor Title）',
+  '{{竞品品牌名}}': '示例竞品品牌',
+  '{{竞品五点描述}}': '1. 示例卖点一\n2. 示例卖点二\n3. 示例卖点三',
+  '{{竞品卖点补充}}': '示例补充卖点',
+  '{{违禁词合规红线}}': '[示例合规要求]',
+  '{{竞品资料}}': '[完整竞品资料示例]'
+}
+
+function renderPreview(text: string): string {
+  let out = text || ''
+  for (const [key, value] of Object.entries(previewSamples)) {
+    out = out.split(key).join(value)
+  }
+  return out || '（填写内容后显示预览）'
+}
+
+const contentPreview = computed(() => renderPreview(form.content))
+const redlinePreview = computed(() => renderPreview(form.compliance_redlines))
+
 async function handleSubmit() {
   await formRef.value.validate()
   submitting.value = true
@@ -351,6 +373,10 @@ onMounted(load)
               {{ p.key }}
             </el-tag>
           </div>
+          <div v-if="redlinePreview" class="preview-box">
+            <span class="ph-label">实时预览：</span>
+            <pre>{{ redlinePreview }}</pre>
+          </div>
         </el-form-item>
 
         <el-form-item label="指令内容" prop="content">
@@ -372,6 +398,10 @@ onMounted(load)
             >
               {{ p.key }}
             </el-tag>
+          </div>
+          <div v-if="contentPreview" class="preview-box">
+            <span class="ph-label">实时预览：</span>
+            <pre>{{ contentPreview }}</pre>
           </div>
         </el-form-item>
 
@@ -447,6 +477,28 @@ onMounted(load)
 
   .ph-tag {
     cursor: pointer;
+  }
+}
+
+.preview-box {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+
+  .ph-label {
+    font-size: 12px;
+    color: #909399;
+  }
+
+  pre {
+    margin: 6px 0 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #606266;
   }
 }
 

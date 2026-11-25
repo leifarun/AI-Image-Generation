@@ -11,6 +11,7 @@ import {
 } from '@/api/tasks'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/datetime'
+import { calcActualCost, formatMoney } from '@/constants/pricing'
 
 const route = useRoute()
 const router = useRouter()
@@ -149,6 +150,12 @@ onMounted(load)
         <el-descriptions-item label="使用模板">{{ detail.template_name || '—' }}</el-descriptions-item>
         <el-descriptions-item label="当前状态">
           <StatusTag :status="detail.status" />
+        </el-descriptions-item>
+        <el-descriptions-item label="生成进度">
+          {{ detail.results.length }} / {{ detail.image_count }}
+        </el-descriptions-item>
+        <el-descriptions-item label="实际成本">
+          {{ formatMoney(calcActualCost(detail.results.map((r) => r.model))) }}
         </el-descriptions-item>
         <el-descriptions-item label="竞品卖点补充" :span="2">{{ detail.selling_points || '—' }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.error_message" label="失败原因" :span="2">
