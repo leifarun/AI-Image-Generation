@@ -357,7 +357,13 @@ onMounted(load)
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="680px">
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      width="680px"
+      align-center
+      class="sop-template-dialog"
+    >
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <el-form-item label="模板名称" prop="name">
           <el-input v-model="form.name" :placeholder="isChildMode ? '例如：图2 使用场景图' : '例如：主图+附图6张标准版'" />
@@ -505,6 +511,9 @@ onMounted(load)
 .preview-box {
   margin-top: 8px;
   padding: 10px 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   background: #f5f7fa;
   border: 1px solid #ebeef5;
   border-radius: 6px;
@@ -522,6 +531,54 @@ onMounted(load)
     line-height: 1.6;
     color: #606266;
   }
+}
+
+:global(.sop-template-dialog) {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 32px);
+  margin: 0 auto;
+}
+
+:global(.sop-template-dialog .el-dialog__body) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 16px;
+  scrollbar-width: auto;
+  scrollbar-gutter: stable;
+}
+
+:global(.sop-template-dialog .el-dialog__footer) {
+  flex-shrink: 0;
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
+  background: #fff;
+}
+
+:global(.sop-template-dialog .el-dialog__body::-webkit-scrollbar),
+:global(.sop-template-dialog .preview-box::-webkit-scrollbar) {
+  width: 14px;
+  height: 14px;
+}
+
+:global(.sop-template-dialog .el-dialog__body::-webkit-scrollbar-track),
+:global(.sop-template-dialog .preview-box::-webkit-scrollbar-track) {
+  background: #f2f3f5;
+  border-radius: 7px;
+}
+
+:global(.sop-template-dialog .el-dialog__body::-webkit-scrollbar-thumb),
+:global(.sop-template-dialog .preview-box::-webkit-scrollbar-thumb) {
+  min-height: 48px;
+  background: #b1b3b8;
+  border: 3px solid #f2f3f5;
+  border-radius: 7px;
+}
+
+:global(.sop-template-dialog .el-dialog__body::-webkit-scrollbar-thumb:hover),
+:global(.sop-template-dialog .preview-box::-webkit-scrollbar-thumb:hover) {
+  background: #909399;
 }
 
 :deep(.child-row) {

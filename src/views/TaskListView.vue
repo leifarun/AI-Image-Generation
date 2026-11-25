@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleClose, Search } from '@element-plus/icons-vue'
 import type { VxeGridProps, VxeGridInstance } from 'vxe-table'
+import { useWindowSize } from '@vueuse/core'
 import dayjs from 'dayjs'
 import {
   fetchTasks,
@@ -24,6 +25,10 @@ import ResultsDialog from '@/views/tasks/ResultsDialog.vue'
 const userStore = useUserStore()
 const isAdmin = computed(() => userStore.role === 'admin')
 const gridRef = ref<VxeGridInstance>()
+const { width: viewportWidth, height: viewportHeight } = useWindowSize()
+const gridHeight = computed(() =>
+  Math.max(360, viewportHeight.value - (viewportWidth.value < 1100 ? 330 : 220))
+)
 
 const filters = reactive({
   asin: '',
@@ -238,7 +243,7 @@ onMounted(loadData)
 const gridOptions = reactive<VxeGridProps>({
   border: true,
   showOverflow: true,
-  height: 'calc(100vh - 250px)',
+  height: gridHeight.value,
   minHeight: 320,
   rowConfig: { keyField: 'id' },
   columnConfig: { resizable: true },
@@ -281,6 +286,11 @@ const gridOptions = reactive<VxeGridProps>({
     pageSizes: [10, 20, 50, 100],
     layouts: ['Total', 'Sizes', 'PrevPage', 'Number', 'NextPage', 'FullJump']
   }
+})
+
+watch(gridHeight, (height) => {
+  gridOptions.height = height
+  gridRef.value?.recalculate()
 })
 </script>
 
@@ -432,6 +442,22 @@ const gridOptions = reactive<VxeGridProps>({
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.table-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+
+  :deep(> .el-card__body) {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
 }
 
 .no-auth {
@@ -444,6 +470,7 @@ const gridOptions = reactive<VxeGridProps>({
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .search-box {
