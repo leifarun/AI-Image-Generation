@@ -6,6 +6,33 @@
 -- 执行位置：Supabase SQL Editor
 -- ============================================================
 
+-- 已手写旧变量时，先移除此前自动补在末尾的新变量，避免重复执行。
+update public.sop_templates
+set
+  content = regexp_replace(content, E'\\n\\n\\{\\{子模板内容\\}\\}\\s*$', ''),
+  updated_at = now()
+where parent_id is null
+  and (
+    position('{{指定子模版}}' in content) > 0
+    or position('{{指定子模板}}' in content) > 0
+  )
+  and content ~ E'\\n\\n\\{\\{子模板内容\\}\\}\\s*$';
+
+-- 统一旧变量名。
+update public.sop_templates
+set
+  content = replace(
+    replace(content, '{{指定子模版}}', '{{子模板内容}}'),
+    '{{指定子模板}}',
+    '{{子模板内容}}'
+  ),
+  updated_at = now()
+where parent_id is null
+  and (
+    position('{{指定子模版}}' in content) > 0
+    or position('{{指定子模板}}' in content) > 0
+  );
+
 update public.sop_templates parent
 set
   content = rtrim(parent.content) || E'\n\n{{子模板内容}}',

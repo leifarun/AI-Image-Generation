@@ -338,6 +338,7 @@ function assemblePrompt(
     : ''
   const sellingText = ctx.all_selling_points || ''
   const complianceText = ctx.compliance_redlines || ''
+  const subtemplateText = ctx.subtemplate_content || ''
 
   // 占位符 → 真实数据（模板里出现的 {{xxx}} 会被替换）
   const data: Record<string, string> = {
@@ -348,7 +349,9 @@ function assemblePrompt(
     '竞品五点描述': bulletText,
     '竞品卖点补充': sellingText,
     '竞品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}`,
-    '子模板内容': ctx.subtemplate_content || '',
+    '子模板内容': subtemplateText,
+    '指定子模版': subtemplateText,
+    '指定子模板': subtemplateText,
     '违禁词合规红线': complianceText,
     'ASIN': ctx.asin,
     '站点': ctx.marketplace
@@ -358,7 +361,7 @@ function assemblePrompt(
     return `请根据以下竞品资料生成营销图：\n\n【竞品标题】\n${ctx.title || '（无）'}\n\n【竞品品牌名】\n${ctx.brand_name || '（无）'}\n\n【竞品五点描述】\n${bulletText || '（无）'}\n\n【竞品卖点补充】\n${sellingText || '（无）'}\n\n【违禁词合规红线】\n${complianceText || '（无）'}`
   }
 
-  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|子模板内容|违禁词合规红线|ASIN|站点)\}\}/g
+  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|子模板内容|指定子模版|指定子模板|违禁词合规红线|ASIN|站点)\}\}/g
   let resolved = template
   // 多轮替换：支持“违禁词合规红线”字段内部再引用竞品品牌名等变量。
   for (let pass = 0; pass < 4; pass++) {
