@@ -13,6 +13,7 @@ const ARK_API_KEY = Deno.env.get('ARK_API_KEY') || ''
 const ARK_BASE_URL = Deno.env.get('ARK_BASE_URL') || 'https://ark.cn-beijing.volces.com/api/v3'
 
 const FALLBACK_DOUBAO_MODEL = Deno.env.get('DOUBAO_MODEL') || 'doubao-seedream-4-5-251128'
+const DOUBAO_REQUEST_TIMEOUT_MS = 180_000
 
 // 诊断：确认关键环境变量是否注入（不打印明文，只看是否存在）
 console.log('[诊断] SUPABASE_URL 存在:', !!Deno.env.get('SUPABASE_URL'))
@@ -51,8 +52,24 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const processed = await processQueue()
-    return new Response(JSON.stringify({ ok: true, processed }), {
+    const backgroundTask = processQueue().catch((e) => {
+      console.error('process-task background error:', e)
+    })
+    const edgeRuntime = (globalThis as {
+      EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void }
+    }).EdgeRuntime
+
+    if (edgeRuntime) {
+      // 后台执行，避免同步请求在 Supabase 150 秒空闲超时处被网关截断。
+      edgeRuntime.waitUntil(backgroundTask)
+      return new Response(JSON.stringify({ ok: true, accepted: true }), {
+        status: 202,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    await backgroundTask
+    return new Response(JSON.stringify({ ok: true, accepted: true }), {
       headers: { 'Content-Type': 'application/json' }
     })
   } catch (e) {
@@ -100,9 +117,10 @@ async function processQueue(): Promise<number> {
   return processed
 }
 
-// 自愈：把卡在 generating 超过 3 分钟的任务重置回 queued
+// 自愈：把卡在 generating 超过 4 分钟的任务重置回 queued。
+// 必须留出 180 秒豆包请求超时和图片准备/转存时间，避免仍在运行的任务被重复领取。
 async function healStuckTasks(): Promise<void> {
-  const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString()
+  const cutoff = new Date(Date.now() - 4 * 60 * 1000).toISOString()
   const { error } = await supabase.from('tasks').update({ status: 'queued', error_message: null })
     .eq('status', 'generating')
     .lt('updated_at', cutoff)
@@ -274,6 +292,11 @@ async function handleTask(taskId: string): Promise<void> {
     }
   } catch (e) {
     console.error(`[task ${taskId}] 豆包生成失败:`, e)
+    if (e instanceof Error && e.message.includes(`请求超时（${DOUBAO_REQUEST_TIMEOUT_MS}ms）`)) {
+      await failTask(taskId, `豆包生成失败：${e.message}`)
+      return
+    }
+
     // 重试 1 次
     const retry = await supabase.from('tasks').select('retry_count').eq('id', taskId).single()
     const count = (retry?.data?.retry_count ?? 0) as number
@@ -553,7 +576,7 @@ async function callDoubao(
       Authorization: `Bearer ${ARK_API_KEY}`
     },
     body: JSON.stringify(body)
-  }, 90000) // 豆包 5.5 生成耗时波动较大；90 秒仍低于函数 150 秒总上限
+  }, DOUBAO_REQUEST_TIMEOUT_MS) // 豆包 5.5 生成耗时波动较大；超时后直接记录明确失败原因
 
   if (!resp.ok) {
     const errText = await resp.text()
