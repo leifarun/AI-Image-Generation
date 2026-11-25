@@ -13,7 +13,7 @@ const ARK_API_KEY = Deno.env.get('ARK_API_KEY') || ''
 const ARK_BASE_URL = Deno.env.get('ARK_BASE_URL') || 'https://ark.cn-beijing.volces.com/api/v3'
 
 const FALLBACK_DOUBAO_MODEL = Deno.env.get('DOUBAO_MODEL') || 'doubao-seedream-4-5-251128'
-const DOUBAO_REQUEST_TIMEOUT_MS = 180_000
+const DOUBAO_REQUEST_TIMEOUT_MS = 130_000
 
 // 诊断：确认关键环境变量是否注入（不打印明文，只看是否存在）
 console.log('[诊断] SUPABASE_URL 存在:', !!Deno.env.get('SUPABASE_URL'))
@@ -118,7 +118,7 @@ async function processQueue(): Promise<number> {
 }
 
 // 自愈：把卡在 generating 超过 4 分钟的任务重置回 queued。
-// 必须留出 180 秒豆包请求超时和图片准备/转存时间，避免仍在运行的任务被重复领取。
+// 必须留出 130 秒豆包请求超时和约 20 秒图片准备/转存时间，避免仍在运行的任务被重复领取。
 async function healStuckTasks(): Promise<void> {
   const cutoff = new Date(Date.now() - 4 * 60 * 1000).toISOString()
   const { error } = await supabase.from('tasks').update({ status: 'queued', error_message: null })
