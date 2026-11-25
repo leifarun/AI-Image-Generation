@@ -5,7 +5,6 @@ export interface SystemSettings {
   max_concurrent_tasks: number
   default_doubao_model: string
   marketplaces: string[]
-  doubao_request_timeout_seconds: number
   output_width: number
   output_height: number
   output_format: 'jpeg' | 'png'
@@ -20,7 +19,6 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   max_concurrent_tasks: 2,
   default_doubao_model: 'doubao-seedream-4-5-251128',
   marketplaces: ['US', 'UK', 'DE', 'JP', 'CA', 'FR', 'IT', 'ES', 'AU', 'AE', 'SA'],
-  doubao_request_timeout_seconds: 130,
   output_width: 1600,
   output_height: 1600,
   output_format: 'jpeg',
@@ -58,12 +56,6 @@ export async function fetchSystemSettings(): Promise<SystemSettings> {
     marketplaces: Array.isArray(values.marketplaces)
       ? values.marketplaces.filter((item): item is string => typeof item === 'string')
       : DEFAULT_SYSTEM_SETTINGS.marketplaces,
-    doubao_request_timeout_seconds: toNumberInRange(
-      values.doubao_request_timeout_seconds,
-      30,
-      130,
-      DEFAULT_SYSTEM_SETTINGS.doubao_request_timeout_seconds
-    ),
     output_width: toNumberInRange(
       values.output_width,
       512,
@@ -189,7 +181,6 @@ export async function saveSystemSettings(settings: SystemSettings): Promise<void
     ['max_concurrent_tasks', settings.max_concurrent_tasks],
     ['default_doubao_model', settings.default_doubao_model.trim()],
     ['marketplaces', settings.marketplaces],
-    ['doubao_request_timeout_seconds', settings.doubao_request_timeout_seconds],
     ['output_width', settings.output_width],
     ['output_height', settings.output_height],
     ['output_format', settings.output_format],

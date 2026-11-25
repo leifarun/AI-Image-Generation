@@ -95,16 +95,6 @@ onMounted(load)
           <span class="form-tip">建议先保持 2，确认豆包账号限流后再调高</span>
         </el-form-item>
 
-        <el-form-item label="单张生成超时">
-          <el-input-number
-            v-model="form.doubao_request_timeout_seconds"
-            :min="30"
-            :max="130"
-            :step="5"
-          />
-          <span class="form-tip">秒。Supabase Free 的整段后台任务上限为 150 秒，当前最高 130 秒。</span>
-        </el-form-item>
-
         <el-form-item label="默认豆包图片模型" class="form-span-2">
           <el-select
             v-model="form.default_doubao_model"

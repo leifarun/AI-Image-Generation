@@ -14,7 +14,7 @@ const ARK_API_KEY = Deno.env.get('ARK_API_KEY') || ''
 const ARK_BASE_URL = Deno.env.get('ARK_BASE_URL') || 'https://ark.cn-beijing.volces.com/api/v3'
 
 const FALLBACK_DOUBAO_MODEL = Deno.env.get('DOUBAO_MODEL') || 'doubao-seedream-4-5-251128'
-const DOUBAO_REQUEST_TIMEOUT_MS = 130_000
+const DOUBAO_REQUEST_TIMEOUT_MS = 150_000
 const OUTPUT_IMAGE_SIZE = '1600x1600'
 const MAX_RESULT_IMAGE_BYTES = 2 * 1024 * 1024
 const REFERENCE_IMAGE_MAX_EDGE = 800
@@ -359,7 +359,6 @@ async function handleTask(taskId: string): Promise<void> {
 async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
   const keys = [
     'default_doubao_model',
-    'doubao_request_timeout_seconds',
     'output_width',
     'output_height',
     'output_format',
@@ -385,12 +384,6 @@ async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
       values.default_doubao_model.trim()
     ? values.default_doubao_model.trim()
     : FALLBACK_DOUBAO_MODEL
-  const timeoutSeconds = numberInRange(
-    values.doubao_request_timeout_seconds,
-    30,
-    130,
-    DOUBAO_REQUEST_TIMEOUT_MS / 1000
-  )
   const [fallbackOutputWidth, fallbackOutputHeight] = OUTPUT_IMAGE_SIZE
     .split('x')
     .map((part) => Number(part))
@@ -427,7 +420,7 @@ async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
 
   return {
     model,
-    timeoutMs: timeoutSeconds * 1000,
+    timeoutMs: DOUBAO_REQUEST_TIMEOUT_MS,
     outputWidth,
     outputHeight,
     outputFormat,
