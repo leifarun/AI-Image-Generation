@@ -371,7 +371,7 @@ function assemblePrompt(
 
   const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|商品图片|商品标题|商品品牌名|五点描述|所有卖点信息|卖点补充|违禁词合规红线|商品资料|ASIN|站点|标题|品牌|合规红线|五点|卖点)\}\}/g
   let resolved = template
-  // 多轮替换：支持“违禁词合规红线”字段内部再引用商品品牌名等变量。
+  // 多轮替换：支持“违禁词合规红线”字段内部再引用竞品品牌名等变量。
   for (let pass = 0; pass < 4; pass++) {
     const next = resolved.replace(variablePattern, (_, key: string) => data[key] ?? '')
     if (next === resolved) break
@@ -401,7 +401,7 @@ async function fetchAmazonListing(
         console.log(`[抓取] 成功 ${url}，品牌=${parsed.brand || '未识别'}，标题 ${parsed.title.length} 字，五点 ${parsed.bullets.length} 条，图片 ${parsed.images.length} 张`)
         return parsed
       }
-      lastError = '未解析到商品标题'
+      lastError = '未解析到竞品标题'
       console.log(`[抓取] ${url} 返回 ${html.length} 字节但无标题`)
     } catch (e) {
       lastError = String(e).slice(0, 200)
@@ -615,7 +615,7 @@ async function prepareReferenceImages(
   }
 
   if (candidates.length > 0 && prepared.length === 0) {
-    throw new Error('商品参考图全部下载失败，请检查图片地址后重做任务')
+    throw new Error('竞品参考图全部下载失败，请检查图片地址后重做任务')
   }
   console.log(
     `[task ${taskId}] 参考图准备完成：${prepared.length}/${candidates.length} 张，` +
