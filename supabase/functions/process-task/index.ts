@@ -14,6 +14,7 @@ const ARK_BASE_URL = Deno.env.get('ARK_BASE_URL') || 'https://ark.cn-beijing.vol
 
 const FALLBACK_DOUBAO_MODEL = Deno.env.get('DOUBAO_MODEL') || 'doubao-seedream-4-5-251128'
 const DOUBAO_REQUEST_TIMEOUT_MS = 130_000
+const OUTPUT_IMAGE_SIZE = '1600x1600'
 
 // 诊断：确认关键环境变量是否注入（不打印明文，只看是否存在）
 console.log('[诊断] SUPABASE_URL 存在:', !!Deno.env.get('SUPABASE_URL'))
@@ -562,6 +563,7 @@ async function callDoubao(
   const body: Record<string, unknown> = {
     model,
     prompt,
+    size: OUTPUT_IMAGE_SIZE,
     response_format: 'url',
     watermark: false
   }
