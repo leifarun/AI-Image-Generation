@@ -17,6 +17,8 @@ const FALLBACK_DOUBAO_MODEL = Deno.env.get('DOUBAO_MODEL') || 'doubao-seedream-4
 const DOUBAO_REQUEST_TIMEOUT_MS = 130_000
 const OUTPUT_IMAGE_SIZE = '1600x1600'
 const MAX_RESULT_IMAGE_BYTES = 2 * 1024 * 1024
+const REFERENCE_IMAGE_MAX_EDGE = 800
+const REFERENCE_IMAGE_JPEG_QUALITY = 88
 
 // 诊断：确认关键环境变量是否注入（不打印明文，只看是否存在）
 console.log('[诊断] SUPABASE_URL 存在:', !!Deno.env.get('SUPABASE_URL'))
@@ -601,7 +603,7 @@ async function callDoubao(
   return url
 }
 
-// 下载全部竞品参考图并转为 data URL；当前最多 9 张，与抓取上限保持一致
+// 下载全部竞品参考图，压到最长边 800px 后转为 JPEG Base64；最多 9 张
 async function prepareReferenceImages(
   urls: string[] | null,
   taskId: string
@@ -610,7 +612,7 @@ async function prepareReferenceImages(
   const prepared: string[] = []
   let totalBytes = 0
   const maxImageBytes = 10 * 1024 * 1024
-  const maxTotalBytes = 32 * 1024 * 1024
+  const maxTotalBytes = 8 * 1024 * 1024
 
   const results = await Promise.allSettled(
     candidates.map(async (url) => {
@@ -629,9 +631,26 @@ async function prepareReferenceImages(
       }
       const contentType = (resp.headers.get('content-type') || 'image/jpeg').split(';')[0]
       if (!contentType.startsWith('image/')) throw new Error('参考图类型无效')
+      const image = await Image.decode(new Uint8Array(buf))
+      if (Math.max(image.width, image.height) > REFERENCE_IMAGE_MAX_EDGE) {
+        image.resize({
+          width: REFERENCE_IMAGE_MAX_EDGE,
+          height: REFERENCE_IMAGE_MAX_EDGE,
+          fit: 'inside',
+          mode: 'bicubic'
+        })
+      }
+      const jpeg = await image.encodeJPEG({
+        quality: REFERENCE_IMAGE_JPEG_QUALITY,
+        subsampling: '4:2:0',
+        background: 0xffffffff,
+        gainMap: false
+      })
       return {
-        bytes: buf.byteLength,
-        dataUrl: `data:${contentType};base64,${bytesToBase64(new Uint8Array(buf))}`
+        bytes: jpeg.byteLength,
+        width: image.width,
+        height: image.height,
+        dataUrl: `data:image/jpeg;base64,${bytesToBase64(jpeg)}`
       }
     })
   )
@@ -643,7 +662,7 @@ async function prepareReferenceImages(
       )
     }
     if (totalBytes + result.value.bytes > maxTotalBytes) {
-      throw new Error('竞品参考图总大小超过 32MB，无法一次发送全部图片')
+      throw new Error('竞品参考图压缩后总大小超过 8MB，无法一次发送全部图片')
     }
     totalBytes += result.value.bytes
     prepared.push(result.value.dataUrl)
@@ -654,7 +673,7 @@ async function prepareReferenceImages(
   }
   console.log(
     `[task ${taskId}] 参考图准备完成：${prepared.length}/${candidates.length} 张，` +
-    `约 ${(totalBytes / 1024 / 1024).toFixed(2)}MB`
+    `最长边 ${REFERENCE_IMAGE_MAX_EDGE}px，约 ${(totalBytes / 1024 / 1024).toFixed(2)}MB`
   )
   return prepared
 }
