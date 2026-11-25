@@ -345,7 +345,7 @@ function assemblePrompt(
     '竞品品牌名': ctx.brand_name || '',
     '竞品五点描述': bulletText,
     '竞品卖点补充': sellingText,
-    '竞品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}\n【违禁词合规红线】\n${complianceText}`,
+    '竞品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}`,
     // 兼容 v0.1.2 及更早模板中的旧占位符
     '商品图片': imageText,
     '商品标题': ctx.title || '',
@@ -354,7 +354,7 @@ function assemblePrompt(
     '所有卖点信息': '',
     '卖点补充': sellingText,
     '违禁词合规红线': complianceText,
-    '商品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}\n【违禁词合规红线】\n${complianceText}`,
+    '商品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title || ''}\n【竞品品牌名】\n${ctx.brand_name || ''}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}`,
     'ASIN': ctx.asin,
     '站点': ctx.marketplace,
     // 兼容旧占位符
