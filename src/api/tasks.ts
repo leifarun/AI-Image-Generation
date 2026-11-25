@@ -1,4 +1,5 @@
 import { requireSupabase } from '@/api/supabase'
+import { fetchDefaultDoubaoModel } from '@/api/settings'
 import { MAX_REFERENCE_IMAGES } from '@/constants/pricing'
 
 export interface TaskRow {
@@ -7,6 +8,7 @@ export interface TaskRow {
   marketplace: string
   selling_points: string
   template_id: string | null
+  model: string | null
   prompt_assembled: string | null
   fetch_mode: 'auto' | 'manual' | null
   product_title: string | null
@@ -86,11 +88,26 @@ export interface CreateTaskInput {
   selling_points: string
   template_id: string | null
   subtemplate_ids?: string[]
+  model?: string
+  product_title?: string
+  brand_name?: string
+  product_bullets?: string[]
+  product_images?: string[]
 }
 
 /** 新建任务：初始状态 pending_fetch，提交人自动取当前登录用户；image_count 由模板决定 */
 export async function createTask(input: CreateTaskInput): Promise<string> {
   const supabase = requireSupabase()
+  const productTitle = input.product_title?.trim() ?? ''
+  const brandName = input.brand_name?.trim() ?? ''
+  const productBullets = (input.product_bullets ?? []).map((item) => item.trim()).filter(Boolean)
+  const productImages = (input.product_images ?? []).map((item) => item.trim()).filter(Boolean)
+  if (productImages.length > MAX_REFERENCE_IMAGES) {
+    throw new Error(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
+  }
+  const hasManualProductData = Boolean(
+    productTitle || brandName || productBullets.length || productImages.length
+  )
 
   // 先取模板的 image_count
   let imageCount = 1
@@ -105,6 +122,7 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
     imageCount = tpl?.image_count ?? 1
   }
 
+  const model = (input.model?.trim() || await fetchDefaultDoubaoModel()).trim()
   const { data, error } = await supabase
     .from('tasks')
     .insert({
@@ -112,10 +130,15 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
       marketplace: input.marketplace,
       selling_points: input.selling_points.trim(),
       template_id: input.template_id,
+      model,
       image_count: imageCount,
       subtemplate_ids: input.subtemplate_ids ?? [],
-      status: 'pending_fetch',
-      fetch_mode: 'auto'
+      product_title: productTitle || null,
+      brand_name: brandName || null,
+      product_bullets: productBullets.length ? productBullets : null,
+      product_images: productImages.length ? productImages : null,
+      status: hasManualProductData ? 'queued' : 'pending_fetch',
+      fetch_mode: hasManualProductData ? 'manual' : 'auto'
     })
     .select('id')
     .single()

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createTask } from '@/api/tasks'
+import { Upload } from '@element-plus/icons-vue'
+import { createTask, uploadReferenceImage } from '@/api/tasks'
 import { fetchActiveTemplates, type SopTemplateRow } from '@/api/sop'
-import { fetchDefaultDoubaoModel } from '@/api/settings'
-import { MARKETPLACE_OPTIONS, formatMarketplaceLabel } from '@/constants/marketplace'
+import { fetchDefaultDoubaoModel, fetchSupportedMarketplaces } from '@/api/settings'
+import { formatMarketplaceLabel } from '@/constants/marketplace'
 import {
   estimateTaskCost,
   formatCostRange,
@@ -16,16 +17,24 @@ const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'created'): void }>()
 
 const formRef = ref()
+const fileInput = ref<HTMLInputElement>()
 const submitting = ref(false)
+const uploading = ref(false)
 const templates = ref<SopTemplateRow[]>([])
 const defaultModelId = ref('')
+const supportedMarketplaces = ref<string[]>([])
+const manualProductOpen = ref<string[]>([])
 
 const form = reactive({
   asin: '',
   marketplace: 'US',
   selling_points: '',
   template_id: null as string | null,
-  subtemplate_ids: [] as string[]
+  subtemplate_ids: [] as string[],
+  product_title: '',
+  brand_name: '',
+  product_bullets_text: '',
+  product_images_text: ''
 })
 
 const rules = {
@@ -48,6 +57,17 @@ const selectedChildren = computed(() =>
     .sort((a, b) => a.sort_order - b.sort_order)
 )
 
+const marketplaceOptions = computed(() =>
+  supportedMarketplaces.value.map((code) => ({
+    value: code,
+    label: formatMarketplaceLabel(code)
+  }))
+)
+
+const manualImageCount = computed(
+  () => form.product_images_text.split('\n').map((item) => item.trim()).filter(Boolean).length
+)
+
 const imageCount = computed(() => {
   if (selectedChildren.value.length) return form.subtemplate_ids.length
   return selectedTemplate.value?.image_count ?? 0
@@ -58,6 +78,7 @@ const costEstimate = computed(() =>
 )
 
 const costText = computed(() => {
+  if (selectedChildren.value.length && imageCount.value <= 0) return '请选择至少一张图片'
   if (imageCount.value <= 0) return '选择模板后显示'
   return formatCostRange(costEstimate.value)
 })
@@ -73,28 +94,70 @@ async function loadTemplates() {
     if (!form.template_id && parentTemplates.value.length) {
       const def = parentTemplates.value.find((t) => t.is_default) ?? parentTemplates.value[0]
       form.template_id = def.id
-      syncSubtemplateSelection(def.id)
+      syncSubtemplateSelection()
     }
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载模板失败')
   }
 }
 
-function syncSubtemplateSelection(templateId: string | null) {
-  form.subtemplate_ids = templateId
-    ? templates.value
-        .filter((t) => t.parent_id === templateId)
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map((t) => t.id)
-    : []
+function syncSubtemplateSelection() {
+  // 子模板默认全部不勾选，避免误生成全部图片并产生费用。
+  form.subtemplate_ids = []
 }
 
-function handleTemplateChange(templateId: string | null) {
-  syncSubtemplateSelection(templateId)
+function handleTemplateChange() {
+  syncSubtemplateSelection()
 }
 
 async function loadDefaultModel() {
   defaultModelId.value = await fetchDefaultDoubaoModel()
+}
+
+async function loadMarketplaces() {
+  try {
+    supportedMarketplaces.value = await fetchSupportedMarketplaces()
+    if (supportedMarketplaces.value.length && !supportedMarketplaces.value.includes(form.marketplace)) {
+      form.marketplace = supportedMarketplaces.value[0]
+    }
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '加载可用站点失败')
+  }
+}
+
+async function handleFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  if (!files.length) return
+
+  uploading.value = true
+  try {
+    const existing = form.product_images_text
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean)
+    const remaining = MAX_REFERENCE_IMAGES - existing.length
+    if (remaining <= 0) {
+      ElMessage.warning(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
+      return
+    }
+    const accepted = files.slice(0, remaining)
+    const urls: string[] = []
+    for (const file of accepted) {
+      urls.push(await uploadReferenceImage(file))
+    }
+    form.product_images_text = [...existing, ...urls].join('\n')
+    manualProductOpen.value = ['product']
+    ElMessage.success(`已上传 ${urls.length} 张图片`)
+    if (files.length > accepted.length) {
+      ElMessage.warning(`超过 ${MAX_REFERENCE_IMAGES} 张的部分未上传`)
+    }
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '上传失败')
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
 }
 
 function handleClose() {
@@ -102,12 +165,25 @@ function handleClose() {
   formRef.value?.resetFields()
   form.selling_points = ''
   form.subtemplate_ids = []
+  form.product_title = ''
+  form.brand_name = ''
+  form.product_bullets_text = ''
+  form.product_images_text = ''
+  manualProductOpen.value = []
 }
 
 async function handleSubmit() {
   await formRef.value.validate()
   if (selectedChildren.value.length && !form.subtemplate_ids.length) {
     ElMessage.warning('请至少勾选一个要生成的子模板')
+    return
+  }
+  const productImages = form.product_images_text
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (productImages.length > MAX_REFERENCE_IMAGES) {
+    ElMessage.warning(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
     return
   }
   submitting.value = true
@@ -117,9 +193,17 @@ async function handleSubmit() {
       marketplace: form.marketplace,
       selling_points: form.selling_points,
       template_id: form.template_id,
-      subtemplate_ids: selectedChildren.value.length ? form.subtemplate_ids : []
+      subtemplate_ids: selectedChildren.value.length ? form.subtemplate_ids : [],
+      model: defaultModelId.value,
+      product_title: form.product_title,
+      brand_name: form.brand_name,
+      product_bullets: form.product_bullets_text
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean),
+      product_images: productImages
     })
-    ElMessage.success('任务已提交，系统将自动抓取竞品资料')
+    ElMessage.success('任务已提交')
     emit('created')
     handleClose()
   } catch (e) {
@@ -135,6 +219,7 @@ watch(
     if (!open) return
     void loadTemplates()
     void loadDefaultModel()
+    void loadMarketplaces()
   },
   { immediate: true }
 )
@@ -161,13 +246,71 @@ watch(
           placeholder="输入代码或国家名搜索"
         >
           <el-option
-            v-for="item in MARKETPLACE_OPTIONS"
-            :key="item.code"
-            :value="item.code"
-            :label="formatMarketplaceLabel(item.code)"
+            v-for="item in marketplaceOptions"
+            :key="item.value"
+            :value="item.value"
+            :label="item.label"
           />
         </el-select>
       </el-form-item>
+
+      <el-collapse v-model="manualProductOpen" class="manual-product">
+        <el-collapse-item name="product">
+          <template #title>
+            <span class="manual-product-title">手动提供竞品资料（可选）</span>
+          </template>
+          <div class="field-hint manual-product-tip">
+            全部留空时，系统会按所选站点到亚马逊前台自动抓取。填写任意资料后，将优先使用手动内容，不再自动覆盖。
+          </div>
+
+          <el-form-item label="竞品品牌名">
+            <el-input v-model="form.brand_name" placeholder="例如 Braun" clearable />
+          </el-form-item>
+
+          <el-form-item label="竞品标题">
+            <el-input
+              v-model="form.product_title"
+              type="textarea"
+              :rows="2"
+              placeholder="填写竞品标题"
+            />
+          </el-form-item>
+
+          <el-form-item label="竞品五点描述（每行一条）">
+            <el-input
+              v-model="form.product_bullets_text"
+              type="textarea"
+              :rows="4"
+              placeholder="每行填写一条五点描述"
+            />
+          </el-form-item>
+
+          <el-form-item>
+            <template #label>
+              <div class="manual-image-label">
+                <span>竞品图片 URL（最多 {{ MAX_REFERENCE_IMAGES }} 张）</span>
+                <el-button
+                  size="small"
+                  :icon="Upload"
+                  :loading="uploading"
+                  @click="fileInput?.click()"
+                >
+                  上传本地图片
+                </el-button>
+              </div>
+            </template>
+            <el-input
+              v-model="form.product_images_text"
+              type="textarea"
+              :rows="3"
+              :placeholder="`每行一个图片 URL，也可上传本地图片，最多 ${MAX_REFERENCE_IMAGES} 张`"
+            />
+            <div class="limit-hint" :class="{ danger: manualImageCount > MAX_REFERENCE_IMAGES }">
+              已填写 {{ manualImageCount }} / {{ MAX_REFERENCE_IMAGES }} 张
+            </div>
+          </el-form-item>
+        </el-collapse-item>
+      </el-collapse>
 
       <el-form-item label="竞品卖点补充（可选，每行一条）" prop="selling_points">
         <el-input
@@ -228,6 +371,15 @@ watch(
       </el-form-item>
     </el-form>
 
+    <input
+      ref="fileInput"
+      type="file"
+      accept="image/*"
+      multiple
+      hidden
+      @change="handleFiles"
+    />
+
     <template #footer>
       <el-button @click="handleClose">取消</el-button>
       <el-button type="primary" :loading="submitting" @click="handleSubmit">提交</el-button>
@@ -247,6 +399,39 @@ watch(
   color: #909399;
   line-height: 1.5;
   margin-top: 4px;
+}
+
+.manual-product {
+  margin: -2px 0 18px;
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.manual-product-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.manual-product-tip {
+  margin: 0 0 12px;
+}
+
+.manual-image-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.limit-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+
+  &.danger {
+    color: #f56c6c;
+  }
 }
 
 .cost-line {

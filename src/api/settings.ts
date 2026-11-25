@@ -69,6 +69,15 @@ export async function fetchDefaultDoubaoModel(): Promise<string> {
   return typeof data === 'string' && data.trim() ? data.trim() : FALLBACK_DOUBAO_MODEL_ID
 }
 
+/** 读取管理员配置的可用站点；普通员工通过安全函数读取 */
+export async function fetchSupportedMarketplaces(): Promise<string[]> {
+  const supabase = requireSupabase()
+  const { data, error } = await supabase.rpc('get_supported_marketplaces')
+  if (error) return DEFAULT_SYSTEM_SETTINGS.marketplaces
+  if (!Array.isArray(data)) return DEFAULT_SYSTEM_SETTINGS.marketplaces
+  return data.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+}
+
 /** 逐项保存管理员的运行参数 */
 export async function saveSystemSettings(settings: SystemSettings): Promise<void> {
   const supabase = requireSupabase()

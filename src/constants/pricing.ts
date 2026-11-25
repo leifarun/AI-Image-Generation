@@ -75,6 +75,14 @@ export function getDoubaoImagePrice(modelId: string | null | undefined): DoubaoI
   return byPrefix ?? DOUBAO_IMAGE_PRICES[0]
 }
 
+/** 将模型 ID 转成界面标签；未知模型保留原始 ID，避免误标成其他模型。 */
+export function formatDoubaoModelLabel(modelId: string | null | undefined): string {
+  const id = (modelId ?? '').trim()
+  if (!id) return '—'
+  const exact = DOUBAO_IMAGE_PRICES.find((item) => item.modelId === id)
+  return exact?.label ?? id
+}
+
 /** 单张参考图输入成本（考虑首张免费规则） */
 export function calcReferenceInputCost(price: DoubaoImagePrice, referenceCount: number): number {
   const count = Math.max(0, Math.min(referenceCount, MAX_REFERENCE_IMAGES))

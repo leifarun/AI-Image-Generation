@@ -14,7 +14,7 @@ import {
 } from '@/api/tasks'
 import { TASK_STATUS_LIST, getStatusLabel } from '@/constants/task'
 import { MARKETPLACE_OPTIONS, formatMarketplaceLabel } from '@/constants/marketplace'
-import { calcActualCost, formatMoney } from '@/constants/pricing'
+import { calcActualCost, formatDoubaoModelLabel, formatMoney } from '@/constants/pricing'
 import { formatDateTime } from '@/utils/datetime'
 import { useUserStore } from '@/stores/user'
 import CreateTaskDrawer from '@/views/tasks/CreateTaskDrawer.vue'
@@ -109,6 +109,10 @@ function progressText(row: TaskRow): string {
   return `${done}/${total}`
 }
 
+function modelText(row: TaskRow): string {
+  return formatDoubaoModelLabel(row.model || row.result_models?.[0])
+}
+
 async function exportCsv() {
   try {
     const result = await fetchTasks({
@@ -122,13 +126,14 @@ async function exportCsv() {
       from: filters.dateRange[0] ? new Date(filters.dateRange[0]).toISOString() : undefined,
       to: filters.dateRange[1] ? new Date(filters.dateRange[1]).toISOString() : undefined
     })
-    const header = ['ASIN', '站点', '竞品品牌', '竞品标题', '模板', '提交人', '状态', '进度', '实际成本', '提交时间', '失败原因']
+    const header = ['ASIN', '站点', '竞品品牌', '竞品标题', '模板', '模型', '提交人', '状态', '进度', '实际成本', '提交时间', '失败原因']
     const body = result.rows.map((r) => [
       r.asin,
       r.marketplace,
       r.brand_name ?? '',
       r.product_title ?? '',
       r.template_name ?? '',
+      modelText(r),
       r.creator_name ?? '',
       getStatusLabel(r.status),
       progressText(r),
@@ -255,6 +260,7 @@ const gridOptions = reactive<VxeGridProps>({
     { field: 'marketplace', title: '站点', width: 70 },
     { field: 'selling_points', title: '竞品卖点补充', minWidth: 180, showOverflow: true },
     { field: 'template_name', title: '模板', minWidth: 120, showOverflow: true },
+    { field: 'model', title: '模型', width: 145, formatter: ({ row }) => modelText(row) },
     { title: '进度', width: 90, slots: { default: 'progress' } },
     { title: '实际成本', width: 100, slots: { default: 'cost' } },
     { title: '组装后的 AI 指令', width: 160, slots: { default: 'prompt' } },

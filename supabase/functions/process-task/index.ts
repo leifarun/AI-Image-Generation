@@ -33,6 +33,7 @@ interface TaskRow {
   marketplace: string
   selling_points: string
   template_id: string | null
+  model: string | null
   template_content: string | null
   product_title: string | null
   brand_name: string | null
@@ -151,7 +152,11 @@ async function handleTask(taskId: string): Promise<void> {
 
   const t = task as unknown as TaskRow
   console.log(`[task ${taskId}] 任务读取成功，当前资料：标题=${t.product_title ? '有' : '无'}`)
-  const doubaoModel = await resolveDoubaoModel()
+  const taskModel = t.model?.trim() ?? ''
+  const doubaoModel = taskModel || await resolveDoubaoModel()
+  if (!taskModel) {
+    await supabase.from('tasks').update({ model: doubaoModel }).eq('id', taskId)
+  }
   console.log(`[task ${taskId}] 使用豆包模型: ${doubaoModel}`)
 
   // 2.1 单独读模板内容
@@ -187,7 +192,8 @@ async function handleTask(taskId: string): Promise<void> {
   let productBullets = t.product_bullets
   let productImages = t.product_images
 
-  if (!productTitle && !productBullets) {
+  // 手动提供了任意竞品资料时，尊重人工内容，不再用前台抓取覆盖。
+  if (t.fetch_mode !== 'manual' && !productTitle && !productBullets) {
     console.log(`[task ${taskId}] 开始抓取亚马逊 ${t.marketplace}/${t.asin}`)
     try {
       const fetched = await fetchAmazonListing(t.asin, t.marketplace)
