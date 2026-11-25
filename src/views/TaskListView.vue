@@ -149,9 +149,18 @@ async function exportCsv() {
 
 async function handleDelete(row: TaskRow) {
   try {
-    await ElMessageBox.confirm(`确定删除该任务（ASIN: ${row.asin}）吗？删除后结果图片将一并删除。`, '删除确认', {
-      type: 'warning'
-    })
+    await ElMessageBox.confirm(
+      `确定删除该任务（ASIN: ${row.asin}）吗？删除后结果图片也将一并删除。`,
+      '确认删除任务？',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        closeOnClickModal: false,
+        closeOnPressEscape: false,
+        showClose: false
+      }
+    )
   } catch {
     return
   }
@@ -190,8 +199,15 @@ async function handleRetry(row: TaskRow) {
   try {
     await ElMessageBox.confirm(
       `确定重做该任务（ASIN: ${row.asin}）吗？将按最新竞品资料重新生成图片，可能产生模型调用费用。`,
-      '重做确认',
-      { type: 'warning' }
+      '确认重做任务？',
+      {
+        type: 'warning',
+        confirmButtonText: '确认重做',
+        cancelButtonText: '取消',
+        closeOnClickModal: false,
+        closeOnPressEscape: false,
+        showClose: false
+      }
     )
   } catch {
     return
@@ -253,8 +269,8 @@ const gridOptions = reactive<VxeGridProps>({
     { title: '生成结果', width: 110, slots: { default: 'results' } },
     {
       title: '操作',
-      width: 110,
-      fixed: 'right',
+      width: 140,
+      showOverflow: false,
       slots: { default: 'action' }
     }
   ],
