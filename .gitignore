@@ -6,4 +6,5 @@ dist/
 work/
 outputs/
 supabase/.temp/
+{const
 .DS_Store

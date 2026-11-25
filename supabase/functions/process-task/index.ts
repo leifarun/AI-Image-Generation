@@ -473,16 +473,23 @@ function parseAmazonHtml(html: string): { title: string; brand: string; bullets:
 
   // 图片
   const images: string[] = []
-  for (const m of html.matchAll(/data-old-hires="([^"]+\.jpg)"/g)) {
+  // 优先解析页面图库 JSON 中的 hiRes 高清图，可拿到前台展示的全部图片
+  for (const m of html.matchAll(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/[^"]+)"/g)) {
     if (!images.includes(m[1])) images.push(m[1])
   }
   if (!images.length) {
+    for (const m of html.matchAll(/data-old-hires="([^"]+\.jpg)"/g)) {
+      if (!images.includes(m[1])) images.push(m[1])
+    }
+  }
+  if (!images.length) {
     for (const m of html.matchAll(/<img[^>]+src="(https:\/\/m\.media-amazon\.com\/images\/[^"]+\.jpg)"/g)) {
-      if (!images.includes(m[1]) && images.length < 7) images.push(m[1])
+      if (!images.includes(m[1])) images.push(m[1])
     }
   }
 
-  return { title, brand, bullets: bullets.slice(0, 5), images: images.slice(0, 7) }
+  // 无论前台有多少张，最多只取前 9 张；不足 9 张则保留全部
+  return { title, brand, bullets: bullets.slice(0, 5), images: images.slice(0, 9) }
 }
 
 function cleanBrandText(value: string): string {
