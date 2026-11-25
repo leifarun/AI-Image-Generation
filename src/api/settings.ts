@@ -14,6 +14,7 @@ export interface SystemSettings {
   reference_max_edge: number
   reference_jpeg_quality: number
   reference_max_total_mb: number
+  reference_image_limit: number
 }
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
@@ -28,7 +29,8 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   output_max_mb: 2,
   reference_max_edge: 800,
   reference_jpeg_quality: 88,
-  reference_max_total_mb: 8
+  reference_max_total_mb: 8,
+  reference_image_limit: 9
 }
 
 interface SettingRow {
@@ -104,6 +106,12 @@ export async function fetchSystemSettings(): Promise<SystemSettings> {
       1,
       32,
       DEFAULT_SYSTEM_SETTINGS.reference_max_total_mb
+    ),
+    reference_image_limit: toNumberInRange(
+      values.reference_image_limit,
+      1,
+      9,
+      DEFAULT_SYSTEM_SETTINGS.reference_image_limit
     )
   }
 }
@@ -137,6 +145,19 @@ export async function fetchSupportedMarketplaces(): Promise<string[]> {
   return data.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
 }
 
+/** 运营估算成本时读取当前实际发送的参考图数量 */
+export async function fetchReferenceImageLimit(): Promise<number> {
+  const supabase = requireSupabase()
+  const { data, error } = await supabase.rpc('get_reference_image_limit')
+  if (error) return DEFAULT_SYSTEM_SETTINGS.reference_image_limit
+  return toNumberInRange(
+    data,
+    1,
+    9,
+    DEFAULT_SYSTEM_SETTINGS.reference_image_limit
+  )
+}
+
 /** 逐项保存管理员的运行参数 */
 export async function saveSystemSettings(settings: SystemSettings): Promise<void> {
   const supabase = requireSupabase()
@@ -152,7 +173,8 @@ export async function saveSystemSettings(settings: SystemSettings): Promise<void
     ['output_max_mb', settings.output_max_mb],
     ['reference_max_edge', settings.reference_max_edge],
     ['reference_jpeg_quality', settings.reference_jpeg_quality],
-    ['reference_max_total_mb', settings.reference_max_total_mb]
+    ['reference_max_total_mb', settings.reference_max_total_mb],
+    ['reference_image_limit', settings.reference_image_limit]
   ]
 
   for (const [key, value] of entries) {

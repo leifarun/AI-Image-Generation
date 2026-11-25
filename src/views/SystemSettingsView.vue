@@ -187,6 +187,16 @@ onMounted(load)
           <span class="form-tip">MB。压缩并转换 Base64 前的总大小。</span>
         </el-form-item>
 
+        <el-form-item label="发送给豆包的参考图数量">
+          <el-input-number
+            v-model="form.reference_image_limit"
+            :min="1"
+            :max="9"
+            :step="1"
+          />
+          <span class="form-tip">张。按竞品图片顺序取前 N 张，当前默认全部 9 张。</span>
+        </el-form-item>
+
         <el-divider content-position="left">站点</el-divider>
 
         <el-form-item label="支持的亚马逊站点">

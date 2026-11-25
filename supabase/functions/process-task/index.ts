@@ -59,6 +59,7 @@ interface RuntimeSettings {
   referenceMaxEdge: number
   referenceJpegQuality: number
   referenceMaxTotalBytes: number
+  referenceImageLimit: number
 }
 
 // ---------- 主入口 ----------
@@ -294,7 +295,8 @@ async function handleTask(taskId: string): Promise<void> {
       taskId,
       runtimeSettings.referenceMaxEdge,
       runtimeSettings.referenceJpegQuality,
-      runtimeSettings.referenceMaxTotalBytes
+      runtimeSettings.referenceMaxTotalBytes,
+      runtimeSettings.referenceImageLimit
     )
     const imageUrl = await callDoubao(
       prompt,
@@ -364,7 +366,8 @@ async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
     'output_max_mb',
     'reference_max_edge',
     'reference_jpeg_quality',
-    'reference_max_total_mb'
+    'reference_max_total_mb',
+    'reference_image_limit'
   ]
   const { data, error } = await supabase
     .from('system_settings')
@@ -418,6 +421,9 @@ async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
     32,
     REFERENCE_IMAGE_MAX_TOTAL_BYTES / 1024 / 1024
   )
+  const referenceImageLimit = Math.round(
+    numberInRange(values.reference_image_limit, 1, 9, 9)
+  )
 
   return {
     model,
@@ -428,7 +434,8 @@ async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
     outputMaxBytes: outputMaxMb * 1024 * 1024,
     referenceMaxEdge,
     referenceJpegQuality,
-    referenceMaxTotalBytes: referenceMaxTotalMb * 1024 * 1024
+    referenceMaxTotalBytes: referenceMaxTotalMb * 1024 * 1024,
+    referenceImageLimit
   }
 }
 
@@ -707,9 +714,10 @@ async function prepareReferenceImages(
   taskId: string,
   maxEdge: number,
   jpegQuality: number,
-  maxTotalBytes: number
+  maxTotalBytes: number,
+  maxImages: number
 ): Promise<string[]> {
-  const candidates = (urls ?? []).filter(Boolean).slice(0, 9)
+  const candidates = (urls ?? []).filter(Boolean).slice(0, maxImages)
   const prepared: string[] = []
   let totalBytes = 0
   const maxImageBytes = 10 * 1024 * 1024

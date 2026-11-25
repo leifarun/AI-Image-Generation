@@ -4,7 +4,11 @@ import { ElMessage } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import { createTask, uploadReferenceImage } from '@/api/tasks'
 import { fetchActiveTemplates, type SopTemplateRow } from '@/api/sop'
-import { fetchDefaultDoubaoModel, fetchSupportedMarketplaces } from '@/api/settings'
+import {
+  fetchDefaultDoubaoModel,
+  fetchReferenceImageLimit,
+  fetchSupportedMarketplaces
+} from '@/api/settings'
 import { formatMarketplaceLabel } from '@/constants/marketplace'
 import {
   estimateTaskCost,
@@ -22,6 +26,7 @@ const submitting = ref(false)
 const uploading = ref(false)
 const templates = ref<SopTemplateRow[]>([])
 const defaultModelId = ref('')
+const referenceImageLimit = ref(MAX_REFERENCE_IMAGES)
 const supportedMarketplaces = ref<string[]>([])
 const manualProductOpen = ref<string[]>([])
 
@@ -74,7 +79,7 @@ const imageCount = computed(() => {
 })
 
 const costEstimate = computed(() =>
-  estimateTaskCost(defaultModelId.value, imageCount.value, MAX_REFERENCE_IMAGES)
+  estimateTaskCost(defaultModelId.value, imageCount.value, referenceImageLimit.value)
 )
 
 const costText = computed(() => {
@@ -123,6 +128,10 @@ async function loadMarketplaces() {
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载可用站点失败')
   }
+}
+
+async function loadReferenceImageLimit() {
+  referenceImageLimit.value = await fetchReferenceImageLimit()
 }
 
 async function handleFiles(event: Event) {
@@ -220,6 +229,7 @@ watch(
     void loadTemplates()
     void loadDefaultModel()
     void loadMarketplaces()
+    void loadReferenceImageLimit()
   },
   { immediate: true }
 )
@@ -261,6 +271,7 @@ watch(
           </template>
           <div class="field-hint manual-product-tip">
             全部留空时，系统会按所选站点到亚马逊前台自动抓取。填写任意资料后，将优先使用手动内容，不再自动覆盖。
+            当前会按图片顺序发送前 {{ referenceImageLimit }} 张给豆包。
           </div>
 
           <el-form-item label="竞品品牌名">
@@ -365,7 +376,7 @@ watch(
           </el-tag>
         </div>
         <div class="field-hint">
-          按 1600×1600 输出、每张最多 {{ MAX_REFERENCE_IMAGES }} 张参考图估算；
+          按 1600×1600 输出、每张最多发送 {{ referenceImageLimit }} 张参考图估算；
           区间下限为无参考图，上限为带满参考图。仅作参考，实际以火山方舟账单为准。
         </div>
       </el-form-item>
