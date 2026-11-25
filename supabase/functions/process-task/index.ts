@@ -19,6 +19,7 @@ const OUTPUT_IMAGE_SIZE = '1600x1600'
 const MAX_RESULT_IMAGE_BYTES = 2 * 1024 * 1024
 const REFERENCE_IMAGE_MAX_EDGE = 800
 const REFERENCE_IMAGE_JPEG_QUALITY = 88
+const REFERENCE_IMAGE_MAX_TOTAL_BYTES = 8 * 1024 * 1024
 
 // 诊断：确认关键环境变量是否注入（不打印明文，只看是否存在）
 console.log('[诊断] SUPABASE_URL 存在:', !!Deno.env.get('SUPABASE_URL'))
@@ -46,6 +47,18 @@ interface TaskRow {
   prompt_assembled: string | null
   image_count: number
   subtemplate_ids: string[] | null
+}
+
+interface RuntimeSettings {
+  model: string
+  timeoutMs: number
+  outputWidth: number
+  outputHeight: number
+  outputFormat: 'jpeg' | 'png'
+  outputMaxBytes: number
+  referenceMaxEdge: number
+  referenceJpegQuality: number
+  referenceMaxTotalBytes: number
 }
 
 // ---------- 主入口 ----------
@@ -154,8 +167,9 @@ async function handleTask(taskId: string): Promise<void> {
 
   const t = task as unknown as TaskRow
   console.log(`[task ${taskId}] 任务读取成功，当前资料：标题=${t.product_title ? '有' : '无'}`)
+  const runtimeSettings = await resolveRuntimeSettings()
   const taskModel = t.model?.trim() ?? ''
-  const doubaoModel = taskModel || await resolveDoubaoModel()
+  const doubaoModel = taskModel || runtimeSettings.model
   if (!taskModel) {
     await supabase.from('tasks').update({ model: doubaoModel }).eq('id', taskId)
   }
@@ -275,10 +289,27 @@ async function handleTask(taskId: string): Promise<void> {
     const prompt = `${promptBase}\n\n（本次只生成第 ${index + 1}/${imageCount} 张图，对应图序：${child?.name ?? `图${index + 1}`}，请严格按照上面规则执行）`
     // 由函数自己下载参考图并转为 Base64：
     // 避免豆包侧直接请求 Amazon 图片域名时偶发下载超时。
-    const referenceImages = await prepareReferenceImages(productImages, taskId)
-    const imageUrl = await callDoubao(prompt, referenceImages, doubaoModel)
+    const referenceImages = await prepareReferenceImages(
+      productImages,
+      taskId,
+      runtimeSettings.referenceMaxEdge,
+      runtimeSettings.referenceJpegQuality,
+      runtimeSettings.referenceMaxTotalBytes
+    )
+    const imageUrl = await callDoubao(
+      prompt,
+      referenceImages,
+      doubaoModel,
+      runtimeSettings.timeoutMs,
+      `${runtimeSettings.outputWidth}x${runtimeSettings.outputHeight}`
+    )
     console.log(`[task ${taskId}] 第 ${index + 1} 张豆包返回成功`)
-    const savedPath = await saveImageToStorage(imageUrl, taskId)
+    const savedPath = await saveImageToStorage(
+      imageUrl,
+      taskId,
+      runtimeSettings.outputFormat,
+      runtimeSettings.outputMaxBytes
+    )
     await supabase.from('task_results').insert({
       task_id: taskId,
       image_path: savedPath,
@@ -322,23 +353,88 @@ async function handleTask(taskId: string): Promise<void> {
   }
 }
 
-// 模型 ID 优先读取管理员维护的系统设置，环境变量只作为兜底
-async function resolveDoubaoModel(): Promise<string> {
+// 每次处理任务时读取最新设置，前台保存后无需重新部署函数。
+async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
+  const keys = [
+    'default_doubao_model',
+    'doubao_request_timeout_seconds',
+    'output_width',
+    'output_height',
+    'output_format',
+    'output_max_mb',
+    'reference_max_edge',
+    'reference_jpeg_quality',
+    'reference_max_total_mb'
+  ]
   const { data, error } = await supabase
     .from('system_settings')
-    .select('value')
-    .eq('key', 'default_doubao_model')
-    .maybeSingle()
+    .select('key,value')
+    .in('key', keys)
 
   if (error) {
-    console.error('读取 default_doubao_model 失败，使用兜底模型:', error)
-    return FALLBACK_DOUBAO_MODEL
+    console.error('读取运行设置失败，使用代码兜底值:', error)
   }
 
-  const value = data?.value
-  return typeof value === 'string' && value.trim()
-    ? value.trim()
+  const values = Object.fromEntries(
+    (data ?? []).map((row: { key: string; value: unknown }) => [row.key, row.value])
+  )
+  const model = typeof values.default_doubao_model === 'string' &&
+      values.default_doubao_model.trim()
+    ? values.default_doubao_model.trim()
     : FALLBACK_DOUBAO_MODEL
+  const timeoutSeconds = numberInRange(
+    values.doubao_request_timeout_seconds,
+    30,
+    130,
+    DOUBAO_REQUEST_TIMEOUT_MS / 1000
+  )
+  const [fallbackOutputWidth, fallbackOutputHeight] = OUTPUT_IMAGE_SIZE
+    .split('x')
+    .map((part) => Number(part))
+  const outputWidth = numberInRange(values.output_width, 512, 4096, fallbackOutputWidth)
+  const outputHeight = numberInRange(values.output_height, 512, 4096, fallbackOutputHeight)
+  const outputFormat = values.output_format === 'png' ? 'png' : 'jpeg'
+  const outputMaxMb = numberInRange(
+    values.output_max_mb,
+    1,
+    10,
+    MAX_RESULT_IMAGE_BYTES / 1024 / 1024
+  )
+  const referenceMaxEdge = numberInRange(
+    values.reference_max_edge,
+    256,
+    2048,
+    REFERENCE_IMAGE_MAX_EDGE
+  )
+  const referenceJpegQuality = numberInRange(
+    values.reference_jpeg_quality,
+    50,
+    95,
+    REFERENCE_IMAGE_JPEG_QUALITY
+  )
+  const referenceMaxTotalMb = numberInRange(
+    values.reference_max_total_mb,
+    1,
+    32,
+    REFERENCE_IMAGE_MAX_TOTAL_BYTES / 1024 / 1024
+  )
+
+  return {
+    model,
+    timeoutMs: timeoutSeconds * 1000,
+    outputWidth,
+    outputHeight,
+    outputFormat,
+    outputMaxBytes: outputMaxMb * 1024 * 1024,
+    referenceMaxEdge,
+    referenceJpegQuality,
+    referenceMaxTotalBytes: referenceMaxTotalMb * 1024 * 1024
+  }
+}
+
+function numberInRange(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : fallback
 }
 
 // 把卖点说明按行拆成数组
@@ -568,12 +664,14 @@ function marketplaceToDomain(marketplace: string): string {
 async function callDoubao(
   prompt: string,
   referenceImages: string[] | null,
-  model: string
+  model: string,
+  timeoutMs: number,
+  outputSize: string
 ): Promise<string> {
   const body: Record<string, unknown> = {
     model,
     prompt,
-    size: OUTPUT_IMAGE_SIZE,
+    size: outputSize,
     response_format: 'url',
     watermark: false
   }
@@ -588,7 +686,7 @@ async function callDoubao(
       Authorization: `Bearer ${ARK_API_KEY}`
     },
     body: JSON.stringify(body)
-  }, DOUBAO_REQUEST_TIMEOUT_MS) // 豆包 5.5 生成耗时波动较大；超时后直接记录明确失败原因
+  }, timeoutMs)
 
   if (!resp.ok) {
     const errText = await resp.text()
@@ -606,13 +704,15 @@ async function callDoubao(
 // 下载全部竞品参考图，压到最长边 800px 后转为 JPEG Base64；最多 9 张
 async function prepareReferenceImages(
   urls: string[] | null,
-  taskId: string
+  taskId: string,
+  maxEdge: number,
+  jpegQuality: number,
+  maxTotalBytes: number
 ): Promise<string[]> {
   const candidates = (urls ?? []).filter(Boolean).slice(0, 9)
   const prepared: string[] = []
   let totalBytes = 0
   const maxImageBytes = 10 * 1024 * 1024
-  const maxTotalBytes = 8 * 1024 * 1024
 
   const results = await Promise.allSettled(
     candidates.map(async (url) => {
@@ -632,16 +732,16 @@ async function prepareReferenceImages(
       const contentType = (resp.headers.get('content-type') || 'image/jpeg').split(';')[0]
       if (!contentType.startsWith('image/')) throw new Error('参考图类型无效')
       const image = await Image.decode(new Uint8Array(buf))
-      if (Math.max(image.width, image.height) > REFERENCE_IMAGE_MAX_EDGE) {
+      if (Math.max(image.width, image.height) > maxEdge) {
         image.resize({
-          width: REFERENCE_IMAGE_MAX_EDGE,
-          height: REFERENCE_IMAGE_MAX_EDGE,
+          width: maxEdge,
+          height: maxEdge,
           fit: 'inside',
           mode: 'bicubic'
         })
       }
       const jpeg = await image.encodeJPEG({
-        quality: REFERENCE_IMAGE_JPEG_QUALITY,
+        quality: jpegQuality,
         subsampling: '4:2:0',
         background: 0xffffffff,
         gainMap: false
@@ -662,7 +762,9 @@ async function prepareReferenceImages(
       )
     }
     if (totalBytes + result.value.bytes > maxTotalBytes) {
-      throw new Error('竞品参考图压缩后总大小超过 8MB，无法一次发送全部图片')
+      throw new Error(
+        `竞品参考图压缩后总大小超过 ${Math.round(maxTotalBytes / 1024 / 1024)}MB，无法一次发送全部图片`
+      )
     }
     totalBytes += result.value.bytes
     prepared.push(result.value.dataUrl)
@@ -673,7 +775,7 @@ async function prepareReferenceImages(
   }
   console.log(
     `[task ${taskId}] 参考图准备完成：${prepared.length}/${candidates.length} 张，` +
-    `最长边 ${REFERENCE_IMAGE_MAX_EDGE}px，约 ${(totalBytes / 1024 / 1024).toFixed(2)}MB`
+    `最长边 ${maxEdge}px，约 ${(totalBytes / 1024 / 1024).toFixed(2)}MB`
   )
   return prepared
 }
@@ -708,21 +810,35 @@ async function fetchWithTimeout(
 }
 
 // ---------- 图片转存到 storage（豆包 URL 24h 失效，需转存） ----------
-async function saveImageToStorage(imageUrl: string, taskId: string): Promise<string> {
+async function saveImageToStorage(
+  imageUrl: string,
+  taskId: string,
+  outputFormat: 'jpeg' | 'png',
+  maxBytes: number
+): Promise<string> {
   const resp = await fetchWithTimeout(imageUrl, {}, 30_000)
   if (!resp.ok) throw new Error('下载豆包图片失败')
   const source = new Uint8Array(await resp.arrayBuffer())
   const image = await Image.decode(source)
-  const jpeg = await encodeJpegWithinSizeLimit(image)
+  const encoded = outputFormat === 'png'
+    ? await image.encodePNG()
+    : await encodeJpegWithinSizeLimit(image, maxBytes)
+  if (encoded.byteLength > maxBytes) {
+    throw new Error(
+      `${outputFormat.toUpperCase()} 结果图超过 ${Math.round(maxBytes / 1024 / 1024)}MB，请切换到 JPEG 或提高结果体积上限`
+    )
+  }
 
-  const path = `results/${taskId}/${crypto.randomUUID()}.jpg`
-  const { error } = await supabase.storage.from('task-results').upload(path, jpeg, {
-    contentType: 'image/jpeg',
+  const extension = outputFormat === 'jpeg' ? 'jpg' : 'png'
+  const path = `results/${taskId}/${crypto.randomUUID()}.${extension}`
+  const { error } = await supabase.storage.from('task-results').upload(path, encoded, {
+    contentType: outputFormat === 'jpeg' ? 'image/jpeg' : 'image/png',
     upsert: false
   })
   if (error) throw new Error(`保存图片失败：${error.message}`)
   console.log(
-    `[task ${taskId}] 结果图已转为 JPEG：${(jpeg.byteLength / 1024 / 1024).toFixed(2)}MB`
+    `[task ${taskId}] 结果图已转为 ${outputFormat.toUpperCase()}：` +
+    `${(encoded.byteLength / 1024 / 1024).toFixed(2)}MB`
   )
 
   // 返回可访问的公开 URL
@@ -730,7 +846,7 @@ async function saveImageToStorage(imageUrl: string, taskId: string): Promise<str
   return urlData.publicUrl
 }
 
-async function encodeJpegWithinSizeLimit(image: Image): Promise<Uint8Array> {
+async function encodeJpegWithinSizeLimit(image: Image, maxBytes: number): Promise<Uint8Array> {
   // 优先保持画质；只有实际超过 2MB 时才逐档降低 JPEG 质量。
   for (const quality of [92, 88, 84, 80, 76, 72, 68, 64, 60, 55, 50, 45, 40]) {
     const encoded = await image.encodeJPEG({
@@ -739,9 +855,9 @@ async function encodeJpegWithinSizeLimit(image: Image): Promise<Uint8Array> {
       background: 0xffffffff,
       gainMap: false
     })
-    if (encoded.byteLength <= MAX_RESULT_IMAGE_BYTES) return encoded
+    if (encoded.byteLength <= maxBytes) return encoded
   }
-  throw new Error('结果图压缩后仍超过 2MB')
+  throw new Error(`结果图压缩后仍超过 ${Math.round(maxBytes / 1024 / 1024)}MB`)
 }
 
 // ---------- 标记失败 ----------

@@ -6,13 +6,29 @@ export interface SystemSettings {
   max_requests_per_minute: number
   default_doubao_model: string
   marketplaces: string[]
+  doubao_request_timeout_seconds: number
+  output_width: number
+  output_height: number
+  output_format: 'jpeg' | 'png'
+  output_max_mb: number
+  reference_max_edge: number
+  reference_jpeg_quality: number
+  reference_max_total_mb: number
 }
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   max_concurrent_tasks: 2,
   max_requests_per_minute: 10,
   default_doubao_model: 'doubao-seedream-4-5-251128',
-  marketplaces: ['US', 'UK', 'DE', 'JP', 'CA', 'FR', 'IT', 'ES', 'AU', 'AE', 'SA']
+  marketplaces: ['US', 'UK', 'DE', 'JP', 'CA', 'FR', 'IT', 'ES', 'AU', 'AE', 'SA'],
+  doubao_request_timeout_seconds: 130,
+  output_width: 1600,
+  output_height: 1600,
+  output_format: 'jpeg',
+  output_max_mb: 2,
+  reference_max_edge: 800,
+  reference_jpeg_quality: 88,
+  reference_max_total_mb: 8
 }
 
 interface SettingRow {
@@ -45,7 +61,50 @@ export async function fetchSystemSettings(): Promise<SystemSettings> {
         : DEFAULT_SYSTEM_SETTINGS.default_doubao_model,
     marketplaces: Array.isArray(values.marketplaces)
       ? values.marketplaces.filter((item): item is string => typeof item === 'string')
-      : DEFAULT_SYSTEM_SETTINGS.marketplaces
+      : DEFAULT_SYSTEM_SETTINGS.marketplaces,
+    doubao_request_timeout_seconds: toNumberInRange(
+      values.doubao_request_timeout_seconds,
+      30,
+      130,
+      DEFAULT_SYSTEM_SETTINGS.doubao_request_timeout_seconds
+    ),
+    output_width: toNumberInRange(
+      values.output_width,
+      512,
+      4096,
+      DEFAULT_SYSTEM_SETTINGS.output_width
+    ),
+    output_height: toNumberInRange(
+      values.output_height,
+      512,
+      4096,
+      DEFAULT_SYSTEM_SETTINGS.output_height
+    ),
+    output_format: values.output_format === 'png' ? 'png' : 'jpeg',
+    output_max_mb: toNumberInRange(
+      values.output_max_mb,
+      1,
+      10,
+      DEFAULT_SYSTEM_SETTINGS.output_max_mb
+    ),
+    reference_max_edge: toNumberInRange(
+      values.reference_max_edge,
+      256,
+      2048,
+      DEFAULT_SYSTEM_SETTINGS.reference_max_edge
+    ),
+    reference_jpeg_quality: toNumberInRange(
+      values.reference_jpeg_quality,
+      50,
+      95,
+      DEFAULT_SYSTEM_SETTINGS.reference_jpeg_quality
+    ),
+    reference_max_total_mb: toNumberInRange(
+      values.reference_max_total_mb,
+      1,
+      32,
+      DEFAULT_SYSTEM_SETTINGS.reference_max_total_mb
+    )
   }
 }
 
@@ -85,7 +144,15 @@ export async function saveSystemSettings(settings: SystemSettings): Promise<void
     ['max_concurrent_tasks', settings.max_concurrent_tasks],
     ['max_requests_per_minute', settings.max_requests_per_minute],
     ['default_doubao_model', settings.default_doubao_model.trim()],
-    ['marketplaces', settings.marketplaces]
+    ['marketplaces', settings.marketplaces],
+    ['doubao_request_timeout_seconds', settings.doubao_request_timeout_seconds],
+    ['output_width', settings.output_width],
+    ['output_height', settings.output_height],
+    ['output_format', settings.output_format],
+    ['output_max_mb', settings.output_max_mb],
+    ['reference_max_edge', settings.reference_max_edge],
+    ['reference_jpeg_quality', settings.reference_jpeg_quality],
+    ['reference_max_total_mb', settings.reference_max_total_mb]
   ]
 
   for (const [key, value] of entries) {
@@ -102,4 +169,14 @@ export async function saveSystemSettings(settings: SystemSettings): Promise<void
 function toPositiveInt(value: unknown, fallback: number): number {
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function toNumberInRange(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : fallback
 }

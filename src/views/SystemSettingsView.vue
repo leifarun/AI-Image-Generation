@@ -40,6 +40,11 @@ const modelOptions = [
   }
 ]
 
+const outputFormatOptions = [
+  { value: 'jpeg', label: 'JPEG（.jpg）' },
+  { value: 'png', label: 'PNG（.png）' }
+]
+
 async function load() {
   loading.value = true
   try {
@@ -92,6 +97,18 @@ onMounted(load)
           <span class="form-tip">参数已保存；当前版本主要由任务并发上限控制实际请求节奏</span>
         </el-form-item>
 
+        <el-divider content-position="left">生成与超时</el-divider>
+
+        <el-form-item label="单张生成超时">
+          <el-input-number
+            v-model="form.doubao_request_timeout_seconds"
+            :min="30"
+            :max="130"
+            :step="5"
+          />
+          <span class="form-tip">秒。Supabase Free 的整段后台任务上限为 150 秒，当前最高 130 秒。</span>
+        </el-form-item>
+
         <el-form-item label="默认豆包图片模型">
           <el-select
             v-model="form.default_doubao_model"
@@ -113,6 +130,65 @@ onMounted(load)
           </div>
         </el-form-item>
 
+        <el-form-item label="输出图片分辨率">
+          <div class="inline-control">
+            <el-input-number v-model="form.output_width" :min="512" :max="4096" :step="64" />
+            <span>×</span>
+            <el-input-number v-model="form.output_height" :min="512" :max="4096" :step="64" />
+            <span>px</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="输出图片格式">
+          <el-select v-model="form.output_format" class="compact-select">
+            <el-option
+              v-for="item in outputFormatOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="单张结果最大体积">
+          <el-input-number v-model="form.output_max_mb" :min="1" :max="10" :step="0.5" />
+          <span class="form-tip">MB。JPEG 会按质量自动压缩到该大小以内。</span>
+        </el-form-item>
+
+        <el-divider content-position="left">竞品参考图压缩</el-divider>
+
+        <el-form-item label="参考图最长边">
+          <el-input-number
+            v-model="form.reference_max_edge"
+            :min="256"
+            :max="2048"
+            :step="64"
+          />
+          <span class="form-tip">px。超过该尺寸的图片会等比缩小。</span>
+        </el-form-item>
+
+        <el-form-item label="参考图 JPEG 质量">
+          <el-input-number
+            v-model="form.reference_jpeg_quality"
+            :min="50"
+            :max="95"
+            :step="1"
+          />
+          <span class="form-tip">建议 85～90。</span>
+        </el-form-item>
+
+        <el-form-item label="参考图总大小上限">
+          <el-input-number
+            v-model="form.reference_max_total_mb"
+            :min="1"
+            :max="32"
+            :step="1"
+          />
+          <span class="form-tip">MB。压缩并转换 Base64 前的总大小。</span>
+        </el-form-item>
+
+        <el-divider content-position="left">站点</el-divider>
+
         <el-form-item label="支持的亚马逊站点">
           <el-select
             v-model="form.marketplaces"
@@ -132,6 +208,10 @@ onMounted(load)
           </el-select>
         </el-form-item>
       </el-form>
+
+      <div class="sync-tip">
+        保存后，任务处理器会在下一次任务时读取最新配置，无需重新部署云端函数。
+      </div>
     </el-card>
 
     <el-alert
@@ -178,7 +258,23 @@ onMounted(load)
   width: min(520px, 100%);
 }
 
+.compact-select {
+  width: 180px;
+}
+
+.inline-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .marketplace-select {
   width: min(650px, 100%);
+}
+
+.sync-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #67a23a;
 }
 </style>
