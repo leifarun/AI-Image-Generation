@@ -14,6 +14,8 @@ export interface DashboardSummary {
   totalTasks: number
   queued: number
   processing: number
+  pendingFetch: number
+  needInput: number
   totalSucceeded: number
   totalFailed: number
   totalImages: number
@@ -28,7 +30,17 @@ export interface DashboardSummary {
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   const supabase = requireSupabase()
 
-  const [totalResult, queuedResult, processingResult, succeededResult, failedResult, usageResult, recentResult] =
+  const [
+    totalResult,
+    queuedResult,
+    processingResult,
+    pendingResult,
+    needInputResult,
+    succeededResult,
+    failedResult,
+    usageResult,
+    recentResult
+  ] =
     await Promise.all([
       supabase
         .from('task_view')
@@ -41,6 +53,14 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
         .from('task_view')
         .select('id', { count: 'exact', head: true })
         .in('status', ['fetching', 'generating']),
+      supabase
+        .from('task_view')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending_fetch'),
+      supabase
+        .from('task_view')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'need_input'),
       supabase
         .from('task_view')
         .select('id', { count: 'exact', head: true })
@@ -59,6 +79,8 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     totalResult.error ||
     queuedResult.error ||
     processingResult.error ||
+    pendingResult.error ||
+    needInputResult.error ||
     succeededResult.error ||
     failedResult.error ||
     usageResult.error
@@ -81,6 +103,8 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     totalTasks: totalResult.count ?? 0,
     queued: queuedResult.count ?? 0,
     processing: processingResult.count ?? 0,
+    pendingFetch: pendingResult.count ?? 0,
+    needInput: needInputResult.count ?? 0,
     totalSucceeded: succeededResult.count ?? 0,
     totalFailed: failedResult.count ?? 0,
     totalImages,

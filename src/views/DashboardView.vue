@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
 import {
   fetchDashboardSummary,
   fetchDashboardTasks,
@@ -12,7 +13,7 @@ import {
 import type { TaskRow } from '@/api/tasks'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/datetime'
-import { formatMoney } from '@/constants/pricing'
+import { calcActualCost, formatDoubaoModelLabel, formatMoney } from '@/constants/pricing'
 
 interface StatCard {
   label: string
@@ -29,6 +30,8 @@ const summary = ref<DashboardSummary>({
   totalTasks: 0,
   queued: 0,
   processing: 0,
+  pendingFetch: 0,
+  needInput: 0,
   totalSucceeded: 0,
   totalFailed: 0,
   totalImages: 0,
@@ -38,6 +41,8 @@ const summary = ref<DashboardSummary>({
 const taskRows = ref<TaskRow[]>([])
 const selectedFilter = ref<DashboardTaskFilter>('all')
 const tableCardRef = ref<HTMLElement>()
+const chartRef = ref<HTMLElement>()
+let chartInstance: echarts.ECharts | null = null
 
 const filterOptions: Array<{ label: string; value: DashboardTaskFilter }> = [
   { label: '全部', value: 'all' },
@@ -62,6 +67,55 @@ function progressText(row: { result_count?: number | null; image_count?: number 
   const done = Number(row.result_count ?? 0)
   const total = Math.max(1, Number(row.image_count ?? 0))
   return `${done}/${total}`
+}
+
+function modelText(row: {
+  model?: string | null
+  result_models?: string[] | null
+}): string {
+  return formatDoubaoModelLabel(row.model || row.result_models?.[0])
+}
+
+function actualCost(row: {
+  result_models?: string[] | null
+  result_reference_counts?: number[] | null
+}): string {
+  return formatMoney(calcActualCost(row.result_models, row.result_reference_counts))
+}
+
+const statusDistribution = computed(() => [
+  { name: '排队中', value: summary.value.queued },
+  { name: '处理中', value: summary.value.processing },
+  { name: '待抓取', value: summary.value.pendingFetch },
+  { name: '待补充', value: summary.value.needInput },
+  { name: '已完成', value: summary.value.totalSucceeded },
+  { name: '失败', value: summary.value.totalFailed }
+].filter((item) => item.value > 0))
+
+const hasStatusData = computed(() => statusDistribution.value.length > 0)
+
+function renderStatusChart() {
+  if (!chartRef.value) return
+  if (!chartInstance) {
+    chartInstance = echarts.init(chartRef.value)
+  }
+  chartInstance.setOption({
+    color: ['#e6a23c', '#409eff', '#909399', '#f56c6c', '#67c23a', '#c0c4cc'],
+    tooltip: { trigger: 'item', formatter: '{b}：{c}（{d}%）' },
+    legend: { bottom: 0, icon: 'circle' },
+    series: [
+      {
+        name: '任务状态占比',
+        type: 'pie',
+        radius: ['42%', '70%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: true,
+        itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+        label: { formatter: '{b}\n{d}%' },
+        data: statusDistribution.value
+      }
+    ]
+  }, true)
 }
 
 async function loadSummary() {
@@ -100,9 +154,16 @@ function handleFilterChange() {
 
 async function loadAll() {
   await Promise.all([loadSummary(), loadTasks()])
+  await nextTick()
+  renderStatusChart()
 }
 
 onMounted(loadAll)
+
+onBeforeUnmount(() => {
+  chartInstance?.dispose()
+  chartInstance = null
+})
 </script>
 
 <template>
@@ -165,6 +226,9 @@ onMounted(loadAll)
           <el-table-column prop="marketplace" label="站点" width="70" />
           <el-table-column prop="template_name" label="模板" min-width="140" show-overflow-tooltip />
           <el-table-column prop="creator_name" label="提交人" width="100" />
+          <el-table-column label="模型" min-width="150" show-overflow-tooltip>
+            <template #default="{ row }">{{ modelText(row) }}</template>
+          </el-table-column>
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
               <StatusTag :status="row.status" />
@@ -172,6 +236,9 @@ onMounted(loadAll)
           </el-table-column>
           <el-table-column label="进度" width="90">
             <template #default="{ row }">{{ progressText(row) }}</template>
+          </el-table-column>
+          <el-table-column label="实际成本" width="110">
+            <template #default="{ row }">{{ actualCost(row) }}</template>
           </el-table-column>
           <el-table-column label="提交时间" width="165">
             <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
@@ -182,6 +249,14 @@ onMounted(loadAll)
         </el-table>
       </el-card>
     </div>
+
+    <el-card shadow="never" class="chart-card">
+      <template #header>
+        <span class="card-title">任务状态占比</span>
+      </template>
+      <div v-if="hasStatusData" ref="chartRef" class="status-chart"></div>
+      <el-empty v-else description="暂无任务数据" :image-size="72" />
+    </el-card>
   </div>
 </template>
 
@@ -289,6 +364,19 @@ onMounted(loadAll)
     font-size: 12px;
     color: #909399;
   }
+}
+
+.chart-card {
+  .card-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #303133;
+  }
+}
+
+.status-chart {
+  width: 100%;
+  height: 320px;
 }
 
 .filter-tabs {
