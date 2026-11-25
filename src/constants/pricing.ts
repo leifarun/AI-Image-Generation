@@ -117,10 +117,25 @@ export function formatCostRange(estimate: TaskCostEstimate): string {
   return `约 ¥${estimate.totalMin.toFixed(2)} ~ ¥${estimate.totalMax.toFixed(2)}`
 }
 
-/** 已生成图片的实际成本：按每张结果记录的模型单价累加 */
-export function calcActualCost(models: Array<string | null | undefined> | null | undefined): number {
+/** 单张结果成本：输出图 + 该次实际使用的参考图输入成本 */
+export function calcImageCost(
+  model: string | null | undefined,
+  referenceCount = 0
+): number {
+  const price = getDoubaoImagePrice(model)
+  return roundMoney(price.outputPrice + calcReferenceInputCost(price, referenceCount))
+}
+
+/** 已生成图片的实际成本：逐张累加输出图与参考图输入成本 */
+export function calcActualCost(
+  models: Array<string | null | undefined> | null | undefined,
+  referenceCounts: Array<number | null | undefined> | null | undefined = []
+): number {
   const list = (models ?? []).filter((m): m is string => Boolean(m))
-  const total = list.reduce((sum, model) => sum + getDoubaoImagePrice(model).outputPrice, 0)
+  const total = list.reduce(
+    (sum, model, index) => sum + calcImageCost(model, Number(referenceCounts?.[index] ?? 0)),
+    0
+  )
   return roundMoney(total)
 }
 

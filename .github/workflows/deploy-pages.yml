@@ -28,11 +28,19 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Install dependencies
         run: npm ci
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Typecheck Edge Functions
+        run: deno check supabase/functions/process-task/index.ts supabase/functions/manage-staff/index.ts
 
       - name: Build
         run: npm run build

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import { updateTaskProductData, uploadReferenceImage, type TaskRow } from '@/api/tasks'
+import { MAX_REFERENCE_IMAGES } from '@/constants/pricing'
 import { useUserStore } from '@/stores/user'
 
 const props = defineProps<{
@@ -21,6 +22,9 @@ const title = ref('')
 const brand = ref('')
 const bulletsText = ref('')
 const imagesText = ref('')
+const imageUrlCount = computed(
+  () => imagesText.value.split('\n').map((s) => s.trim()).filter(Boolean).length
+)
 
 const visible = computed({
   get: () => props.modelValue,
@@ -58,16 +62,25 @@ async function handleFiles(event: Event) {
 
   uploading.value = true
   try {
-    const urls: string[] = []
-    for (const file of files) {
-      urls.push(await uploadReferenceImage(file))
-    }
     const existing = imagesText.value
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean)
+    const remaining = MAX_REFERENCE_IMAGES - existing.length
+    if (remaining <= 0) {
+      ElMessage.warning(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张，请先删除多余图片`)
+      return
+    }
+    const acceptedFiles = files.slice(0, remaining)
+    const urls: string[] = []
+    for (const file of acceptedFiles) {
+      urls.push(await uploadReferenceImage(file))
+    }
     imagesText.value = [...existing, ...urls].join('\n')
     ElMessage.success(`已上传 ${urls.length} 张图片`)
+    if (files.length > acceptedFiles.length) {
+      ElMessage.warning(`超过 ${MAX_REFERENCE_IMAGES} 张的部分未上传`)
+    }
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '上传失败')
   } finally {
@@ -78,6 +91,14 @@ async function handleFiles(event: Event) {
 
 async function save() {
   if (!props.task || !editable.value) return
+  const images = imagesText.value
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (images.length > MAX_REFERENCE_IMAGES) {
+    ElMessage.warning(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张，请删除多余图片后再保存`)
+    return
+  }
   saving.value = true
   try {
     await updateTaskProductData(props.task.id, {
@@ -87,10 +108,7 @@ async function save() {
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean),
-      product_images: imagesText.value
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
+      product_images: images
     })
     ElMessage.success('竞品资料已保存')
     visible.value = false
@@ -125,7 +143,7 @@ async function save() {
       <el-form-item>
         <template #label>
           <div class="label-row">
-            <span>竞品图片 URL（每行一个）</span>
+            <span>竞品图片 URL（最多 {{ MAX_REFERENCE_IMAGES }} 张，每行一个）</span>
             <el-button
               v-if="editable"
               size="small"
@@ -137,7 +155,15 @@ async function save() {
             </el-button>
           </div>
         </template>
-        <el-input v-model="imagesText" type="textarea" :rows="5" placeholder="每行一个图片 URL，也可点击上方按钮上传本地图片" />
+        <el-input
+          v-model="imagesText"
+          type="textarea"
+          :rows="5"
+          :placeholder="`最多 ${MAX_REFERENCE_IMAGES} 张，每行一个图片 URL，也可点击上方按钮上传本地图片`"
+        />
+        <div class="limit-hint" :class="{ danger: imageUrlCount > MAX_REFERENCE_IMAGES }">
+          已填写 {{ imageUrlCount }} / {{ MAX_REFERENCE_IMAGES }} 张
+        </div>
       </el-form-item>
     </el-form>
 
@@ -169,5 +195,15 @@ async function save() {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+}
+
+.limit-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+
+  &.danger {
+    color: #f56c6c;
+  }
 }
 </style>

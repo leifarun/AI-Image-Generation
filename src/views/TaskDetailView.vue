@@ -11,7 +11,7 @@ import {
 } from '@/api/tasks'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/datetime'
-import { calcActualCost, formatMoney } from '@/constants/pricing'
+import { calcActualCost, formatMoney, MAX_REFERENCE_IMAGES } from '@/constants/pricing'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +30,13 @@ const supplementForm = ref({
   product_bullets_text: '',
   product_images_text: ''
 })
+const supplementImageCount = computed(
+  () =>
+    supplementForm.value.product_images_text
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean).length
+)
 
 const showPrompt = ref(false)
 
@@ -68,6 +75,10 @@ async function submitSupplement() {
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)
+  if (images.length > MAX_REFERENCE_IMAGES) {
+    ElMessage.warning(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张，请删除多余图片后再保存`)
+    return
+  }
   try {
     await supplementTask(taskId.value, {
       product_title: supplementForm.value.product_title.trim(),
@@ -155,7 +166,14 @@ onMounted(load)
           {{ detail.results.length }} / {{ detail.image_count }}
         </el-descriptions-item>
         <el-descriptions-item label="实际成本">
-          {{ formatMoney(calcActualCost(detail.results.map((r) => r.model))) }}
+          {{
+            formatMoney(
+              calcActualCost(
+                detail.results.map((r) => r.model),
+                detail.results.map((r) => r.reference_count)
+              )
+            )
+          }}
         </el-descriptions-item>
         <el-descriptions-item label="竞品卖点补充" :span="2">{{ detail.selling_points || '—' }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.error_message" label="失败原因" :span="2">
@@ -219,8 +237,11 @@ onMounted(load)
         <el-form-item label="竞品五点描述（每行一条）">
           <el-input v-model="supplementForm.product_bullets_text" type="textarea" :rows="6" placeholder="每行一条卖点" />
         </el-form-item>
-        <el-form-item label="竞品图片链接（每行一个）">
+        <el-form-item label="竞品图片链接（最多 {{ MAX_REFERENCE_IMAGES }} 张，每行一个）">
           <el-input v-model="supplementForm.product_images_text" type="textarea" :rows="3" placeholder="每行一个图片 URL" />
+          <div class="limit-hint" :class="{ danger: supplementImageCount > MAX_REFERENCE_IMAGES }">
+            已填写 {{ supplementImageCount }} / {{ MAX_REFERENCE_IMAGES }} 张
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -260,6 +281,16 @@ onMounted(load)
 
 .error-text {
   color: #f56c6c;
+}
+
+.limit-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+
+  &.danger {
+    color: #f56c6c;
+  }
 }
 
 .image-url-list {

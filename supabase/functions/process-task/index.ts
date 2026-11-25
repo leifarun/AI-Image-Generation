@@ -253,7 +253,8 @@ async function handleTask(taskId: string): Promise<void> {
     await supabase.from('task_results').insert({
       task_id: taskId,
       image_path: savedPath,
-      model: doubaoModel
+      model: doubaoModel,
+      reference_count: referenceImages.length
     })
 
     const nextTotal = generated + 1
@@ -473,8 +474,11 @@ function parseAmazonHtml(html: string): { title: string; brand: string; bullets:
 
   // 图片
   const images: string[] = []
-  // 优先解析页面图库 JSON 中的 hiRes 高清图，可拿到前台展示的全部图片
-  for (const m of html.matchAll(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/[^"]+)"/g)) {
+  // 只解析当前颜色/变体的 initial 图库，避免混入其他变体图片
+  const initialGallery = html.match(
+    /'initial'\s*:\s*A\.\$\.parseJSON\(\s*'([\s\S]*?)'\s*\)/
+  )?.[1] ?? ''
+  for (const m of initialGallery.matchAll(/"hiRes"\s*:\s*"(https:\/\/m\.media-amazon\.com\/images\/[^"]+)"/g)) {
     if (!images.includes(m[1])) images.push(m[1])
   }
   if (!images.length) {

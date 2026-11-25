@@ -1,4 +1,5 @@
 import { requireSupabase } from '@/api/supabase'
+import { MAX_REFERENCE_IMAGES } from '@/constants/pricing'
 
 export interface TaskRow {
   id: string
@@ -19,6 +20,7 @@ export interface TaskRow {
   image_count: number
   result_count: number
   result_models: string[] | null
+  result_reference_counts: number[] | null
   created_by: string
   created_at: string
   updated_at: string
@@ -128,7 +130,7 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
 }
 
 /** 任务详情（查视图拿模板名/提交人，另查结果图片列表） */
-export async function fetchTaskDetail(id: string): Promise<TaskRow & { results: Array<{ id: string; image_path: string; model: string | null }> }> {
+export async function fetchTaskDetail(id: string): Promise<TaskRow & { results: Array<{ id: string; image_path: string; model: string | null; reference_count: number }> }> {
   const supabase = requireSupabase()
 
   const { data, error } = await supabase
@@ -140,14 +142,19 @@ export async function fetchTaskDetail(id: string): Promise<TaskRow & { results: 
 
   const { data: results, error: resError } = await supabase
     .from('task_results')
-    .select('id, image_path, model')
+    .select('id, image_path, model, reference_count')
     .eq('task_id', id)
     .order('created_at', { ascending: true })
   if (resError) throw new Error(resError.message)
 
   return {
     ...(data as unknown as TaskRow),
-    results: (results ?? []) as Array<{ id: string; image_path: string; model: string | null }>
+    results: (results ?? []) as Array<{
+      id: string
+      image_path: string
+      model: string | null
+      reference_count: number
+    }>
   }
 }
 
@@ -168,6 +175,9 @@ export async function supplementTask(
     product_images: string[]
   }
 ): Promise<void> {
+  if (data.product_images.length > MAX_REFERENCE_IMAGES) {
+    throw new Error(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
+  }
   const supabase = requireSupabase()
   const { error } = await supabase
     .from('tasks')
@@ -192,6 +202,9 @@ export async function updateTaskProductData(
     product_images: string[]
   }
 ): Promise<void> {
+  if (data.product_images.length > MAX_REFERENCE_IMAGES) {
+    throw new Error(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
+  }
   const supabase = requireSupabase()
   const { error } = await supabase
     .from('tasks')

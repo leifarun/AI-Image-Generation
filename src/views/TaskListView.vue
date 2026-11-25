@@ -127,7 +127,7 @@ async function exportCsv() {
       r.creator_name ?? '',
       getStatusLabel(r.status),
       progressText(r),
-      calcActualCost(r.result_models).toFixed(2),
+      calcActualCost(r.result_models, r.result_reference_counts).toFixed(2),
       formatDateTime(r.created_at),
       r.error_message ?? ''
     ])
@@ -390,7 +390,7 @@ const gridOptions = reactive<VxeGridProps>({
           </span>
         </template>
         <template #cost="{ row }">
-          {{ formatMoney(calcActualCost(row.result_models)) }}
+          {{ formatMoney(calcActualCost(row.result_models, row.result_reference_counts)) }}
         </template>
         <template #prompt="{ row }">
           <el-button v-if="isAdmin" link type="primary" size="small" @click="openPrompt(row)">查看</el-button>

@@ -1,6 +1,6 @@
 import { requireSupabase } from '@/api/supabase'
 import { fetchTasks, type TaskRow } from '@/api/tasks'
-import { calcActualCost } from '@/constants/pricing'
+import { calcImageCost } from '@/constants/pricing'
 
 export type DashboardTaskFilter =
   | 'all'
@@ -28,7 +28,7 @@ export interface DashboardSummary {
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   const supabase = requireSupabase()
 
-  const [totalResult, queuedResult, processingResult, succeededResult, failedResult, costResult, recentResult] =
+  const [totalResult, queuedResult, processingResult, succeededResult, failedResult, usageResult, recentResult] =
     await Promise.all([
       supabase
         .from('task_view')
@@ -50,8 +50,8 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'failed'),
       supabase
-        .from('task_view')
-        .select('id, result_count, result_models'),
+        .from('task_usage_view')
+        .select('model, reference_count, image_count'),
       fetchTasks({ page: 1, pageSize: 8 })
     ])
 
@@ -61,19 +61,20 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     processingResult.error ||
     succeededResult.error ||
     failedResult.error ||
-    costResult.error
+    usageResult.error
   if (firstError) throw new Error(firstError.message)
 
-  const costRows = (costResult.data ?? []) as Array<{
-    result_count: number
-    result_models: string[] | null
+  const usageRows = (usageResult.data ?? []) as Array<{
+    model: string | null
+    reference_count: number
+    image_count: number
   }>
   let totalImages = 0
   let totalCost = 0
-  for (const row of costRows) {
-    const count = Number(row.result_count ?? 0)
+  for (const row of usageRows) {
+    const count = Number(row.image_count ?? 0)
     totalImages += count
-    totalCost += calcActualCost(row.result_models)
+    totalCost += calcImageCost(row.model, row.reference_count) * count
   }
 
   return {
@@ -83,7 +84,7 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     totalSucceeded: succeededResult.count ?? 0,
     totalFailed: failedResult.count ?? 0,
     totalImages,
-    totalCost,
+    totalCost: Math.round(totalCost * 100) / 100,
     recent: recentResult.rows
   }
 }
