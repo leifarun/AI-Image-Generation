@@ -87,7 +87,7 @@ onMounted(load)
         </div>
       </template>
 
-      <el-form :model="form" label-width="190px">
+      <el-form :model="form" label-width="190px" class="settings-form">
         <el-form-item label="同时生成任务数上限">
           <el-input-number v-model="form.max_concurrent_tasks" :min="1" :max="10" />
           <span class="form-tip">建议先保持 2，确认豆包账号限流后再调高</span>
@@ -105,7 +105,7 @@ onMounted(load)
           <span class="form-tip">秒。Supabase Free 的整段后台任务上限为 150 秒，当前最高 130 秒。</span>
         </el-form-item>
 
-        <el-form-item label="默认豆包图片模型">
+        <el-form-item label="默认豆包图片模型" class="form-span-2">
           <el-select
             v-model="form.default_doubao_model"
             filterable
@@ -217,7 +217,7 @@ onMounted(load)
 
         <el-divider content-position="left">站点</el-divider>
 
-        <el-form-item label="支持的亚马逊站点">
+        <el-form-item label="支持的亚马逊站点" class="form-span-2">
           <el-select
             v-model="form.marketplaces"
             multiple
@@ -259,7 +259,23 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 960px;
+  max-width: 1280px;
+}
+
+.settings-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 28px;
+  align-items: start;
+}
+
+.settings-form :deep(.el-divider) {
+  grid-column: 1 / -1;
+  margin: 8px 0 18px;
+}
+
+.form-span-2 {
+  grid-column: 1 / -1;
 }
 
 .card-head {
@@ -346,7 +362,11 @@ onMounted(load)
   color: #67a23a;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1100px) {
+  .settings-form {
+    display: block;
+  }
+
   :deep(.el-form-item__label) {
     width: 100% !important;
     text-align: left;
