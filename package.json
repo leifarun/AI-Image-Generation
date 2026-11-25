@@ -1,7 +1,7 @@
 {
   "name": "aipic-studio",
   "private": true,
-  "version": "0.1.9",
+  "version": "0.1.10",
   "type": "module",
   "description": "AI 卖点图工场：豆包 AI 亚马逊卖点图生成工具（内部系统）",
   "scripts": {

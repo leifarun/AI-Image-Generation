@@ -534,7 +534,7 @@ async function callDoubao(
     watermark: false
   }
   if (referenceImages && referenceImages.length) {
-    body.image = referenceImages.slice(0, 3)
+    body.image = referenceImages
   }
 
   const resp = await fetchWithTimeout(`${ARK_BASE_URL}/images/generations`, {
@@ -559,16 +559,16 @@ async function callDoubao(
   return url
 }
 
-// 下载亚马逊参考图并转为 data URL，限制数量与体积，避免请求体过大
+// 下载全部竞品参考图并转为 data URL；当前最多 9 张，与抓取上限保持一致
 async function prepareReferenceImages(
   urls: string[] | null,
   taskId: string
 ): Promise<string[]> {
-  const candidates = (urls ?? []).filter(Boolean).slice(0, 3)
+  const candidates = (urls ?? []).filter(Boolean).slice(0, 9)
   const prepared: string[] = []
   let totalBytes = 0
-  const maxImageBytes = 4 * 1024 * 1024
-  const maxTotalBytes = 8 * 1024 * 1024
+  const maxImageBytes = 10 * 1024 * 1024
+  const maxTotalBytes = 32 * 1024 * 1024
 
   const results = await Promise.allSettled(
     candidates.map(async (url) => {
@@ -594,21 +594,21 @@ async function prepareReferenceImages(
     })
   )
 
-  for (const result of results) {
+  for (const [index, result] of results.entries()) {
     if (result.status === 'rejected') {
-      console.warn(`[task ${taskId}] 跳过一张参考图:`, result.reason)
-      continue
+      throw new Error(
+        `竞品参考图第 ${index + 1} 张下载失败：${String(result.reason).slice(0, 200)}`
+      )
     }
     if (totalBytes + result.value.bytes > maxTotalBytes) {
-      console.warn(`[task ${taskId}] 参考图总大小将超过限制，停止追加`)
-      break
+      throw new Error('竞品参考图总大小超过 32MB，无法一次发送全部图片')
     }
     totalBytes += result.value.bytes
     prepared.push(result.value.dataUrl)
   }
 
-  if (candidates.length > 0 && prepared.length === 0) {
-    throw new Error('竞品参考图全部下载失败，请检查图片地址后重做任务')
+  if (candidates.length > 0 && prepared.length !== candidates.length) {
+    throw new Error('竞品参考图未完整准备，无法发送全部图片，请检查图片地址后重做任务')
   }
   console.log(
     `[task ${taskId}] 参考图准备完成：${prepared.length}/${candidates.length} 张，` +

@@ -62,8 +62,8 @@ export const DOUBAO_IMAGE_PRICES: DoubaoImagePrice[] = [
 
 export const FALLBACK_DOUBAO_MODEL_ID = 'doubao-seedream-5-5-261028'
 
-/** 任务处理器每次最多附带 3 张参考图 */
-export const MAX_REFERENCE_IMAGES = 3
+/** 任务处理器每次最多附带 9 张参考图 */
+export const MAX_REFERENCE_IMAGES = 9
 
 /** 按模型 ID 查找单价；未知模型回退到 Seedream 5.5 */
 export function getDoubaoImagePrice(modelId: string | null | undefined): DoubaoImagePrice {
