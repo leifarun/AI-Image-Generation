@@ -14,7 +14,7 @@ const ARK_API_KEY = Deno.env.get('ARK_API_KEY') || ''
 const ARK_BASE_URL = Deno.env.get('ARK_BASE_URL') || 'https://ark.cn-beijing.volces.com/api/v3'
 
 const FALLBACK_DOUBAO_MODEL = Deno.env.get('DOUBAO_MODEL') || 'doubao-seedream-4-5-251128'
-const DOUBAO_REQUEST_TIMEOUT_MS = 150_000
+const DOUBAO_REQUEST_TIMEOUT_MS = 145_000
 const OUTPUT_IMAGE_SIZE = '1600x1600'
 const MAX_RESULT_IMAGE_BYTES = 2 * 1024 * 1024
 const REFERENCE_IMAGE_MAX_EDGE = 800
