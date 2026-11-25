@@ -261,10 +261,10 @@ const gridOptions = reactive<VxeGridProps>({
     { field: 'selling_points', title: '竞品卖点补充', minWidth: 150, showOverflow: true },
     { field: 'template_name', title: '模板', minWidth: 105, showOverflow: true },
     { field: 'model', title: '模型', width: 132, formatter: ({ row }) => modelText(row) },
-    { title: '进度', width: 72, slots: { default: 'progress' } },
     { title: '实际成本', width: 86, slots: { default: 'cost' } },
     { title: '组装后的 AI 指令', width: 124, slots: { default: 'prompt' } },
     { title: '竞品资料', width: 92, slots: { default: 'product' } },
+    { title: '进度', width: 72, slots: { default: 'progress' } },
     {
       field: 'status',
       title: '当前状态',
