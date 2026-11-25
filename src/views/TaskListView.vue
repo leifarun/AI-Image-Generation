@@ -277,10 +277,11 @@ const gridOptions = reactive<VxeGridProps>({
       minWidth: 180,
       showOverflow: true
     },
-    { title: '生成结果', width: 110, slots: { default: 'results' } },
+    { title: '生成结果', width: 110, fixed: 'right', slots: { default: 'results' } },
     {
       title: '操作',
       width: 140,
+      fixed: 'right',
       showOverflow: false,
       slots: { default: 'action' }
     }
