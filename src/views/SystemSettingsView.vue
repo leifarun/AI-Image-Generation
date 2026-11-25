@@ -88,12 +88,12 @@ onMounted(load)
       </template>
 
       <el-form :model="form" label-width="190px" class="settings-form">
+        <el-divider content-position="left">运行控制</el-divider>
+
         <el-form-item label="同时生成任务数上限">
           <el-input-number v-model="form.max_concurrent_tasks" :min="1" :max="10" />
           <span class="form-tip">建议先保持 2，确认豆包账号限流后再调高</span>
         </el-form-item>
-
-        <el-divider content-position="left">生成与超时</el-divider>
 
         <el-form-item label="单张生成超时">
           <el-input-number
@@ -259,7 +259,8 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 1280px;
+  width: 100%;
+  max-width: none;
 }
 
 .settings-form {
