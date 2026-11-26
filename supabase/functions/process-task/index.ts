@@ -16,6 +16,7 @@ const ARK_BASE_URL = Deno.env.get('ARK_BASE_URL') || 'https://ark.cn-beijing.vol
 const FALLBACK_DOUBAO_MODEL = Deno.env.get('DOUBAO_MODEL') || 'doubao-seedream-4-5-251128'
 const DOUBAO_REQUEST_TIMEOUT_MS = 145_000
 const RESULT_IMAGE_DOWNLOAD_TIMEOUT_MS = 60_000
+const EDGE_WALL_CLOCK_LIMIT_MS = 145_000
 const OUTPUT_IMAGE_SIZE = '1600x1600'
 const MAX_RESULT_IMAGE_BYTES = 2 * 1024 * 1024
 const REFERENCE_IMAGE_MAX_EDGE = 800
@@ -152,6 +153,7 @@ async function healStuckTasks(): Promise<void> {
 
 // ---------- 处理单个任务 ----------
 async function handleTask(taskId: string): Promise<void> {
+  const handleStart = Date.now()
   console.log(`[task ${taskId}] 开始处理`)
 
   // 2. 读取任务（先只读 tasks，避免嵌入查询问题）
@@ -307,11 +309,15 @@ async function handleTask(taskId: string): Promise<void> {
       `${runtimeSettings.outputWidth}x${runtimeSettings.outputHeight}`
     )
     console.log(`[task ${taskId}] 第 ${index + 1} 张豆包返回成功`)
+    const elapsedMs = Date.now() - handleStart
+    const remainingBudgetMs = Math.max(5_000, EDGE_WALL_CLOCK_LIMIT_MS - elapsedMs)
+    const saveBudgetMs = Math.min(RESULT_IMAGE_DOWNLOAD_TIMEOUT_MS, remainingBudgetMs)
     const savedPath = await saveImageToStorage(
       imageUrl,
       taskId,
       runtimeSettings.outputFormat,
-      runtimeSettings.outputMaxBytes
+      runtimeSettings.outputMaxBytes,
+      saveBudgetMs
     )
     await supabase.from('task_results').insert({
       task_id: taskId,
@@ -802,16 +808,72 @@ async function fetchWithTimeout(
   }
 }
 
+// 带超时地读取完整响应体：fetch() 只保证到“收到响应头”，
+// 响应体读取（尤其大图片下载）可能无限挂起，必须单独限制。
+async function readBodyWithTimeout(resp: Response, timeoutMs: number): Promise<Uint8Array> {
+  if (!resp.body) {
+    return new Uint8Array(await resp.arrayBuffer())
+  }
+
+  const reader = resp.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  let settled = false
+
+  return await new Promise<Uint8Array>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      void reader.cancel().catch(() => {})
+      reject(new Error(`请求超时（${timeoutMs}ms）`))
+    }, timeoutMs)
+
+    void (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value) {
+            chunks.push(value)
+            totalBytes += value.byteLength
+          }
+        }
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+
+        const merged = new Uint8Array(totalBytes)
+        let offset = 0
+        for (const chunk of chunks) {
+          merged.set(chunk, offset)
+          offset += chunk.byteLength
+        }
+        resolve(merged)
+      } catch (e) {
+        clearTimeout(timer)
+        if (!settled) {
+          settled = true
+          reject(e)
+        }
+      }
+    })()
+  })
+}
+
 // ---------- 图片转存到 storage（豆包 URL 24h 失效，需转存） ----------
 async function saveImageToStorage(
   imageUrl: string,
   taskId: string,
   outputFormat: 'jpeg' | 'png',
-  maxBytes: number
+  maxBytes: number,
+  timeoutMs: number
 ): Promise<string> {
-  const resp = await fetchWithTimeout(imageUrl, {}, RESULT_IMAGE_DOWNLOAD_TIMEOUT_MS)
+  const deadline = Date.now() + timeoutMs
+  const remainingMs = () => Math.max(1_000, deadline - Date.now())
+
+  const resp = await fetchWithTimeout(imageUrl, {}, remainingMs())
   if (!resp.ok) throw new Error('下载豆包图片失败')
-  const source = new Uint8Array(await resp.arrayBuffer())
+  const source = await readBodyWithTimeout(resp, remainingMs())
   const image = await Image.decode(source)
   const encoded = outputFormat === 'png'
     ? await image.encodePNG()
