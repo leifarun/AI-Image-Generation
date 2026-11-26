@@ -10,6 +10,7 @@ import {
   fetchTaskDetail,
   deleteTask,
   retryTask,
+  updateTaskRemark,
   type TaskRow
 } from '@/api/tasks'
 import { TASK_STATUS_LIST, getStatusLabel } from '@/constants/task'
@@ -59,6 +60,9 @@ const promptVisible = ref(false)
 const productVisible = ref(false)
 const resultsVisible = ref(false)
 const resultImagePaths = ref<string[]>([])
+const remarkVisible = ref(false)
+const remarkDraft = ref('')
+const remarkTask = ref<TaskRow | null>(null)
 
 async function loadData() {
   loading.value = true
@@ -126,7 +130,7 @@ async function exportCsv() {
       from: filters.dateRange[0] ? new Date(filters.dateRange[0]).toISOString() : undefined,
       to: filters.dateRange[1] ? new Date(filters.dateRange[1]).toISOString() : undefined
     })
-    const header = ['ASIN', '站点', '竞品品牌', '竞品标题', '模板', '模型', '提交人', '状态', '进度', '实际成本', '提交时间', '失败原因']
+    const header = ['ASIN', '站点', '竞品品牌', '竞品标题', '模板', '模型', '提交人', '状态', '进度', '实际成本', '备注', '提交时间', '失败原因']
     const body = result.rows.map((r) => [
       r.asin,
       r.marketplace,
@@ -138,6 +142,7 @@ async function exportCsv() {
       getStatusLabel(r.status),
       progressText(r),
       calcActualCost(r.result_models, r.result_reference_counts).toFixed(2),
+      r.remark ?? '',
       formatDateTime(r.created_at),
       r.error_message ?? ''
     ])
@@ -191,6 +196,24 @@ function openPrompt(row: TaskRow) {
 function openProduct(row: TaskRow) {
   currentTask.value = row
   productVisible.value = true
+}
+
+function openRemark(row: TaskRow) {
+  remarkTask.value = row
+  remarkDraft.value = row.remark ?? ''
+  remarkVisible.value = true
+}
+
+async function saveRemark() {
+  if (!remarkTask.value) return
+  try {
+    await updateTaskRemark(remarkTask.value.id, remarkDraft.value)
+    remarkTask.value.remark = remarkDraft.value.trim() || null
+    ElMessage.success('备注已保存')
+    remarkVisible.value = false
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '备注保存失败')
+  }
 }
 
 async function openResults(row: TaskRow) {
@@ -262,6 +285,7 @@ const gridOptions = reactive<VxeGridProps>({
     { field: 'template_name', title: '模板', minWidth: 105, showOverflow: true },
     { field: 'model', title: '模型', width: 132, formatter: ({ row }) => modelText(row) },
     { title: '实际成本', width: 86, visible: isAdmin.value, slots: { default: 'cost' } },
+    { title: '备注', width: 150, showOverflow: true, slots: { default: 'remark' } },
     { title: '组装后的 AI 指令', width: 124, visible: isAdmin.value, slots: { default: 'prompt' } },
     { title: '竞品资料', width: 92, slots: { default: 'product' } },
     {
@@ -409,6 +433,12 @@ watch(gridHeight, (height) => {
         <template #cost="{ row }">
           {{ formatMoney(calcActualCost(row.result_models, row.result_reference_counts)) }}
         </template>
+        <template #remark="{ row }">
+          <div class="remark-cell">
+            <span class="remark-text" :title="row.remark">{{ row.remark || '—' }}</span>
+            <el-button link type="primary" size="small" @click="openRemark(row)">编辑</el-button>
+          </div>
+        </template>
         <template #prompt="{ row }">
           <el-button v-if="isAdmin" link type="primary" size="small" @click="openPrompt(row)">查看</el-button>
           <span v-else class="no-auth">无权限</span>
@@ -441,6 +471,21 @@ watch(gridHeight, (height) => {
       :task-id="currentTask?.id ?? ''"
       :image-paths="resultImagePaths"
     />
+
+    <el-dialog v-model="remarkVisible" title="任务备注" width="520px">
+      <el-input
+        v-model="remarkDraft"
+        type="textarea"
+        :rows="5"
+        maxlength="1000"
+        show-word-limit
+        placeholder="写一些关于这个任务的笔记"
+      />
+      <template #footer>
+        <el-button @click="remarkVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveRemark">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -564,6 +609,22 @@ watch(gridHeight, (height) => {
 
 .progress-done {
   color: #67c23a;
+}
+
+.remark-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.remark-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #606266;
 }
 
 .create-button {

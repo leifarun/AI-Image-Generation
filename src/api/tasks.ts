@@ -16,6 +16,7 @@ export interface TaskRow {
   product_bullets: string[] | null
   product_images: string[] | null
   subtemplate_ids: string[] | null
+  remark: string | null
   status: string
   error_message: string | null
   retry_count: number
@@ -238,6 +239,16 @@ export async function updateTaskProductData(
       product_images: data.product_images,
       fetch_mode: 'manual'
     })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/** 更新任务备注 */
+export async function updateTaskRemark(id: string, remark: string): Promise<void> {
+  const supabase = requireSupabase()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ remark: remark.trim() || null })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
