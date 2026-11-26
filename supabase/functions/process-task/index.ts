@@ -301,7 +301,7 @@ async function handleTask(taskId: string): Promise<void> {
       runtimeSettings.referenceMaxTotalBytes,
       runtimeSettings.referenceImageLimit
     )
-    const imageUrl = await callDoubao(
+    const generatedImage = await callDoubao(
       prompt,
       referenceImages,
       doubaoModel,
@@ -309,16 +309,28 @@ async function handleTask(taskId: string): Promise<void> {
       `${runtimeSettings.outputWidth}x${runtimeSettings.outputHeight}`
     )
     console.log(`[task ${taskId}] 第 ${index + 1} 张豆包返回成功`)
-    const elapsedMs = Date.now() - handleStart
-    const remainingBudgetMs = Math.max(5_000, EDGE_WALL_CLOCK_LIMIT_MS - elapsedMs)
-    const saveBudgetMs = Math.min(RESULT_IMAGE_DOWNLOAD_TIMEOUT_MS, remainingBudgetMs)
-    const savedPath = await saveImageToStorage(
-      imageUrl,
-      taskId,
-      runtimeSettings.outputFormat,
-      runtimeSettings.outputMaxBytes,
-      saveBudgetMs
-    )
+    let savedPath: string
+    if (generatedImage.b64) {
+      savedPath = await saveImageBytesToStorage(
+        decodeBase64ToBytes(generatedImage.b64),
+        taskId,
+        runtimeSettings.outputFormat,
+        runtimeSettings.outputMaxBytes
+      )
+    } else if (generatedImage.url) {
+      const elapsedMs = Date.now() - handleStart
+      const remainingBudgetMs = Math.max(5_000, EDGE_WALL_CLOCK_LIMIT_MS - elapsedMs)
+      const saveBudgetMs = Math.min(RESULT_IMAGE_DOWNLOAD_TIMEOUT_MS, remainingBudgetMs)
+      savedPath = await saveImageToStorage(
+        generatedImage.url,
+        taskId,
+        runtimeSettings.outputFormat,
+        runtimeSettings.outputMaxBytes,
+        saveBudgetMs
+      )
+    } else {
+      throw new Error('豆包 API 未返回图片')
+    }
     await supabase.from('task_results').insert({
       task_id: taskId,
       image_path: savedPath,
@@ -665,12 +677,12 @@ async function callDoubao(
   model: string,
   timeoutMs: number,
   outputSize: string
-): Promise<string> {
+): Promise<{ b64: string | null; url: string | null }> {
   const body: Record<string, unknown> = {
     model,
     prompt,
     size: outputSize,
-    response_format: 'url',
+    response_format: 'b64_json',
     watermark: false
   }
   if (referenceImages && referenceImages.length) {
@@ -692,11 +704,22 @@ async function callDoubao(
   }
 
   const json = await resp.json()
-  const url = json?.data?.[0]?.url
-  if (!url) {
+  const generated = json?.data?.[0]
+  const b64 = typeof generated?.b64_json === 'string' ? generated.b64_json : null
+  const url = typeof generated?.url === 'string' ? generated.url : null
+  if (!b64 && !url) {
     throw new Error('豆包 API 未返回图片链接')
   }
-  return url
+  return { b64, url }
+}
+
+function decodeBase64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
 }
 
 // 下载全部竞品参考图，按配置缩放并转为 JPEG Base64；数量与尺寸均由运行设置控制
@@ -874,6 +897,16 @@ async function saveImageToStorage(
   const resp = await fetchWithTimeout(imageUrl, {}, remainingMs())
   if (!resp.ok) throw new Error('下载豆包图片失败')
   const source = await readBodyWithTimeout(resp, remainingMs())
+  return await saveImageBytesToStorage(source, taskId, outputFormat, maxBytes)
+}
+
+// ---------- 图片字节转码并写入 storage ----------
+async function saveImageBytesToStorage(
+  source: Uint8Array,
+  taskId: string,
+  outputFormat: 'jpeg' | 'png',
+  maxBytes: number
+): Promise<string> {
   const image = await Image.decode(source)
   const encoded = outputFormat === 'png'
     ? await image.encodePNG()
