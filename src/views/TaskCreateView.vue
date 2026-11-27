@@ -446,14 +446,14 @@ onMounted(async () => {
         </div>
       </template>
       <el-table :data="subtemplateRows" border class="subtemplate-table">
-        <el-table-column type="index" label="#" width="48" align="center" />
-        <el-table-column label="图片名称（子模板名称）" width="200">
+        <el-table-column type="index" label="#" width="68" align="center" />
+        <el-table-column label="图片名称（子模板名称）" width="212">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="模型" width="185">
+        <el-table-column label="模型" width="211">
           <template #default>{{ formatDoubaoModelLabel(form.model) }}</template>
         </el-table-column>
-        <el-table-column label="自定义说明" width="260">
+        <el-table-column label="自定义说明" width="278">
           <template #default="{ row }">
             <el-input
               v-if="row.id"
@@ -466,22 +466,22 @@ onMounted(async () => {
             <span v-else class="field-hint">独立模板暂不支持单图说明</span>
           </template>
         </el-table-column>
-        <el-table-column label="开关" width="64" align="center">
+        <el-table-column label="开关" width="68" align="center">
           <template #default="{ row }">
             <el-checkbox v-if="row.id" v-model="selected[row.id]" />
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="当前状态" width="90" align="center">
+        <el-table-column label="当前状态" width="116" align="center">
           <template #default>—</template>
         </el-table-column>
-        <el-table-column label="生成结果" width="100" align="center">
+        <el-table-column label="生成结果" width="115" align="center">
           <template #default>—</template>
         </el-table-column>
-        <el-table-column label="操作" width="72" align="center">
+        <el-table-column label="操作" width="113" align="center">
           <template #default>—</template>
         </el-table-column>
-        <el-table-column label="下载" width="72" align="center">
+        <el-table-column label="下载" width="76" align="center">
           <template #default>—</template>
         </el-table-column>
       </el-table>

@@ -523,16 +523,16 @@ onMounted(load)
       </template>
 
       <el-table :data="subtemplateRows" border class="subtemplate-table">
-        <el-table-column type="index" label="#" width="48" align="center" />
-        <el-table-column label="图片名称（子模板名称）" width="200">
+        <el-table-column type="index" label="#" width="68" align="center" />
+        <el-table-column label="图片名称（子模板名称）" width="212">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="模型" width="185">
+        <el-table-column label="模型" width="211">
           <template #default="{ row, $index }">
             {{ formatDoubaoModelLabel(resultFor(row, $index)?.model || detail.model) }}
           </template>
         </el-table-column>
-        <el-table-column label="自定义说明" width="260">
+        <el-table-column label="自定义说明" width="278">
           <template #default="{ row }">
             <el-input
               v-if="row.id"
@@ -545,7 +545,7 @@ onMounted(load)
             <span v-else class="field-hint">独立模板暂不支持单图说明</span>
           </template>
         </el-table-column>
-        <el-table-column label="当前状态" width="90" align="center">
+        <el-table-column label="当前状态" width="116" align="center">
           <template #default="{ row, $index }">
             <StatusTag :status="rowStatus(row, $index)" />
           </template>
@@ -563,7 +563,7 @@ onMounted(load)
             <span v-else class="field-hint">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="72" align="center">
+        <el-table-column label="操作" width="113" align="center">
           <template #default="{ row }">
             <el-button
               v-if="row.id"
@@ -578,7 +578,7 @@ onMounted(load)
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="下载" width="72" align="center">
+        <el-table-column label="下载" width="76" align="center">
           <template #default="{ row, $index }">
             <el-button
               v-if="resultFor(row, $index)"
