@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, ArrowRight, Upload } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Download, Upload } from '@element-plus/icons-vue'
 import { createTask, uploadReferenceImage } from '@/api/tasks'
 import { fetchActiveTemplates, type SopTemplateRow } from '@/api/sop'
 import {
@@ -437,26 +437,30 @@ onMounted(async () => {
       <template #header>
         <div class="section-head">
           <span>子模板生成清单</span>
-          <span class="section-count">
-            已选 {{ selectedSubtemplateIds.length }} / 共 {{ subtemplateRows.length }} 张
-          </span>
+          <div class="head-actions">
+            <span class="section-count">
+              已选 {{ selectedSubtemplateIds.length }} / 共 {{ subtemplateRows.length }} 张
+            </span>
+            <el-button size="small" :icon="Download" disabled>批量下载</el-button>
+          </div>
         </div>
       </template>
-      <el-table :data="subtemplateRows" border>
+      <el-table :data="subtemplateRows" border class="subtemplate-table">
         <el-table-column type="index" label="#" width="48" align="center" />
-        <el-table-column label="图片名称（子模板名称）" min-width="160">
+        <el-table-column label="图片名称（子模板名称）" width="150">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="模型" min-width="150">
+        <el-table-column label="模型" width="132">
           <template #default>{{ formatDoubaoModelLabel(form.model) }}</template>
         </el-table-column>
-        <el-table-column label="自定义说明" min-width="220">
+        <el-table-column label="自定义说明" width="180">
           <template #default="{ row }">
             <el-input
               v-if="row.id"
               v-model="notes[row.id]"
               type="textarea"
-              :autosize="{ minRows: 1, maxRows: 3 }"
+              :rows="2"
+              resize="none"
               placeholder="可选，将追加到该子模板变量中"
             />
             <span v-else class="field-hint">独立模板暂不支持单图说明</span>
@@ -474,7 +478,10 @@ onMounted(async () => {
         <el-table-column label="生成结果" width="100" align="center">
           <template #default>—</template>
         </el-table-column>
-        <el-table-column label="操作" width="80" align="center">
+        <el-table-column label="操作" width="72" align="center">
+          <template #default>—</template>
+        </el-table-column>
+        <el-table-column label="下载" width="72" align="center">
           <template #default>—</template>
         </el-table-column>
       </el-table>
@@ -515,10 +522,34 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
 
-  .section-count {
+  .head-actions {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-count {
     color: #909399;
     font-size: 12px;
+  }
+}
+
+.subtemplate-table {
+  :deep(.el-table__row) {
+    height: 88px;
+  }
+
+  :deep(.el-table__cell) {
+    padding: 4px 0;
+  }
+
+  :deep(.el-table__cell .cell) {
+    line-height: 1.4;
+  }
+
+  :deep(.el-textarea__inner) {
+    line-height: 1.4;
   }
 }
 

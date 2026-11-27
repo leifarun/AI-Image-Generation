@@ -2,7 +2,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload } from '@element-plus/icons-vue'
+import { Download, Upload } from '@element-plus/icons-vue'
+import JSZip from 'jszip'
 import {
   fetchTaskDetail,
   deleteTask,
@@ -50,6 +51,7 @@ const resultUrls = ref<Record<string, string>>({})
 
 const showPrompt = ref(false)
 const savingNotes = ref(false)
+const downloadingZip = ref(false)
 const notes = reactive<Record<string, string>>({})
 
 const productForm = reactive({
@@ -118,6 +120,72 @@ function rowStatus(row: unknown, index: number): string {
 }
 
 const previewUrls = computed(() => Object.values(resultUrls.value).filter(Boolean))
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function safeFileName(name: string, index: number): string {
+  const cleaned = name.replace(/[\\/:*?"<>|]/g, '_').trim() || `image`
+  return `${String(index + 1).padStart(2, '0')}-${cleaned}`
+}
+
+async function downloadSingle(row: unknown, index: number) {
+  const current = row as SubtemplateRow
+  const result = resultFor(row, index)
+  if (!result) return
+  const url = resultUrls.value[result.id]
+  if (!url) {
+    ElMessage.warning('图片地址尚未就绪')
+    return
+  }
+  try {
+    const resp = await fetch(url)
+    if (!resp.ok) throw new Error(String(resp.status))
+    const blob = await resp.blob()
+    const ext = blob.type.includes('jpeg') ? 'jpg' : 'png'
+    downloadBlob(blob, `${safeFileName(current.name, index)}.${ext}`)
+  } catch {
+    window.open(url, '_blank')
+  }
+}
+
+async function downloadBatch() {
+  const urls = previewUrls.value
+  if (!urls.length) {
+    ElMessage.warning('暂无结果图片可下载')
+    return
+  }
+  downloadingZip.value = true
+  try {
+    const zip = new JSZip()
+    const files = await Promise.all(
+      urls.map(async (url, index) => {
+        const resp = await fetch(url)
+        if (!resp.ok) throw new Error(`第 ${index + 1} 张图片下载失败`)
+        const blob = await resp.blob()
+        return { index, blob }
+      })
+    )
+    for (const { index, blob } of files) {
+      const ext = blob.type.includes('jpeg') ? 'jpg' : 'png'
+      const row = subtemplateRows.value[index] ?? { name: `图${index + 1}` }
+      zip.file(`${safeFileName(row.name, index)}.${ext}`, blob)
+    }
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    downloadBlob(zipBlob, `task-${taskId.value}-images.zip`)
+    ElMessage.success(`已打包 ${files.length} 张图片`)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '下载失败')
+  } finally {
+    downloadingZip.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -433,6 +501,16 @@ onMounted(load)
           <span>子模板生成清单</span>
           <div class="head-actions">
             <span class="section-count">共 {{ subtemplateRows.length }} 张</span>
+            <el-button
+              type="primary"
+              size="small"
+              :icon="Download"
+              :loading="downloadingZip"
+              :disabled="!previewUrls.length"
+              @click="downloadBatch"
+            >
+              批量下载
+            </el-button>
             <el-button type="primary" size="small" :loading="savingNotes" @click="saveNotes">
               保存自定义说明
             </el-button>
@@ -440,23 +518,24 @@ onMounted(load)
         </div>
       </template>
 
-      <el-table :data="subtemplateRows" border>
+      <el-table :data="subtemplateRows" border class="subtemplate-table">
         <el-table-column type="index" label="#" width="48" align="center" />
-        <el-table-column label="图片名称（子模板名称）" min-width="150">
+        <el-table-column label="图片名称（子模板名称）" width="150">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="模型" min-width="150">
+        <el-table-column label="模型" width="132">
           <template #default="{ row, $index }">
             {{ formatDoubaoModelLabel(resultFor(row, $index)?.model || detail.model) }}
           </template>
         </el-table-column>
-        <el-table-column label="自定义说明" min-width="220">
+        <el-table-column label="自定义说明" width="180">
           <template #default="{ row }">
             <el-input
               v-if="row.id"
               v-model="notes[row.id]"
               type="textarea"
-              :autosize="{ minRows: 1, maxRows: 3 }"
+              :rows="2"
+              resize="none"
               placeholder="将追加到该子模板变量中"
             />
             <span v-else class="field-hint">独立模板暂不支持单图说明</span>
@@ -467,7 +546,7 @@ onMounted(load)
             <StatusTag :status="rowStatus(row, $index)" />
           </template>
         </el-table-column>
-        <el-table-column label="生成结果" width="120" align="center">
+        <el-table-column label="生成结果" width="110" align="center">
           <template #default="{ row, $index }">
             <el-image
               v-if="resultFor(row, $index)"
@@ -480,7 +559,7 @@ onMounted(load)
             <span v-else class="field-hint">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="90" align="center">
+        <el-table-column label="操作" width="72" align="center">
           <template #default="{ row }">
             <el-button
               v-if="row.id"
@@ -492,6 +571,19 @@ onMounted(load)
             >
               重做
             </el-button>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="下载" width="72" align="center">
+          <template #default="{ row, $index }">
+            <el-button
+              v-if="resultFor(row, $index)"
+              link
+              type="primary"
+              size="small"
+              :icon="Download"
+              @click="downloadSingle(row, $index)"
+            />
             <span v-else>—</span>
           </template>
         </el-table-column>
@@ -556,6 +648,24 @@ onMounted(load)
   font-size: 12px;
 }
 
+.subtemplate-table {
+  :deep(.el-table__row) {
+    height: 88px;
+  }
+
+  :deep(.el-table__cell) {
+    padding: 4px 0;
+  }
+
+  :deep(.el-table__cell .cell) {
+    line-height: 1.4;
+  }
+
+  :deep(.el-textarea__inner) {
+    line-height: 1.4;
+  }
+}
+
 .section-tip {
   margin: 0 0 12px;
 }
@@ -606,8 +716,8 @@ onMounted(load)
 }
 
 .result-thumb {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   border-radius: 6px;
   border: 1px solid #ebeef5;
 }
