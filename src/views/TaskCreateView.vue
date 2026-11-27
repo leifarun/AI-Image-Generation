@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Upload } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Upload } from '@element-plus/icons-vue'
 import { createTask, uploadReferenceImage } from '@/api/tasks'
 import { fetchActiveTemplates, type SopTemplateRow } from '@/api/sop'
 import {
@@ -33,6 +33,7 @@ const fileInput = ref<HTMLInputElement>()
 const loading = ref(false)
 const submitting = ref(false)
 const uploading = ref(false)
+const productPanelOpen = ref(false)
 
 const templates = ref<SopTemplateRow[]>([])
 const defaultModelId = ref('')
@@ -55,6 +56,7 @@ const form = reactive({
 })
 
 const notes = reactive<Record<string, string>>({})
+const selected = reactive<Record<string, boolean>>({})
 
 const rules = {
   asin: [{ required: true, message: '请输入 ASIN', trigger: 'blur' }],
@@ -91,6 +93,12 @@ const subtemplateRows = computed<SubtemplateRow[]>(() => {
   }))
 })
 
+const selectedSubtemplateIds = computed(() =>
+  subtemplateRows.value
+    .map((row) => row.id)
+    .filter((id): id is string => Boolean(id && selected[id]))
+)
+
 const marketplaceOptions = computed(() =>
   supportedMarketplaces.value.map((code) => ({
     value: code,
@@ -109,7 +117,11 @@ const manualImageCount = computed(
   () => form.product_images_text.split('\n').map((item) => item.trim()).filter(Boolean).length
 )
 
-const imageCount = computed(() => subtemplateRows.value.length)
+const imageCount = computed(() =>
+  selectedChildren.value.length
+    ? selectedSubtemplateIds.value.length
+    : subtemplateRows.value.length
+)
 
 const costEstimate = computed(() =>
   estimateTaskCost(
@@ -122,6 +134,7 @@ const costEstimate = computed(() =>
 )
 
 const costText = computed(() => {
+  if (selectedChildren.value.length && imageCount.value <= 0) return '请选择要生成的图片'
   if (imageCount.value <= 0) return '选择模板后显示'
   return formatCostRange(costEstimate.value)
 })
@@ -143,8 +156,10 @@ async function loadTemplates() {
 
 function resetNotesForTemplate() {
   for (const key of Object.keys(notes)) delete notes[key]
+  for (const key of Object.keys(selected)) delete selected[key]
   for (const row of subtemplateRows.value) {
     if (row.id) notes[row.id] = ''
+    if (row.id) selected[row.id] = false
   }
 }
 
@@ -214,6 +229,10 @@ async function handleFiles(event: Event) {
 
 async function handleSubmit() {
   await formRef.value.validate()
+  if (selectedChildren.value.length && !selectedSubtemplateIds.value.length) {
+    ElMessage.warning('请至少勾选一张要生成的图片')
+    return
+  }
   const productImages = form.product_images_text
     .split('\n')
     .map((item) => item.trim())
@@ -226,7 +245,7 @@ async function handleSubmit() {
   submitting.value = true
   try {
     const subtemplateIds = selectedChildren.value.length
-      ? selectedChildren.value.map((child) => child.id)
+      ? selectedSubtemplateIds.value
       : []
     const payloadNotes: Record<string, string> = {}
     for (const row of subtemplateRows.value) {
@@ -351,7 +370,7 @@ onMounted(async () => {
               <el-input
                 v-model="form.selling_points"
                 type="textarea"
-                :rows="3"
+                :rows="2"
                 placeholder="竞品需要补充或重点强调的卖点，例如：加厚防滑&#10;兼容多种墙面&#10;安装无需专业工具"
               />
             </el-form-item>
@@ -362,54 +381,65 @@ onMounted(async () => {
 
     <el-card shadow="never" class="section-card">
       <template #header>
-        <div class="section-head">
+        <div class="section-head collapsible-head" @click="productPanelOpen = !productPanelOpen">
+          <el-icon class="collapse-icon">
+            <ArrowDown v-if="productPanelOpen" />
+            <ArrowRight v-else />
+          </el-icon>
           <span>竞品资料</span>
-          <el-button size="small" :icon="Upload" :loading="uploading" @click="fileInput?.click()">
-            上传本地图片
-          </el-button>
+          <span class="section-count">点击展开 / 收起</span>
         </div>
       </template>
-      <div class="field-hint section-tip">
-        全部留空时，系统会按所选站点到亚马逊前台自动抓取；填写任意资料后，将优先使用手动内容，不再自动覆盖。当前会按图片顺序发送前 {{ referenceImageLimit }} 张给豆包。
+      <div v-show="productPanelOpen">
+        <div class="field-hint section-tip">
+          全部留空时，系统会按所选站点到亚马逊前台自动抓取；填写任意资料后，将优先使用手动内容，不再自动覆盖。当前会按图片顺序发送前 {{ referenceImageLimit }} 张给豆包。
+        </div>
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="8">
+            <el-form-item label="竞品品牌名">
+              <el-input v-model="form.brand_name" placeholder="例如 Braun" clearable />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="16">
+            <el-form-item label="竞品标题">
+              <el-input v-model="form.product_title" type="textarea" :rows="2" placeholder="填写竞品标题" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item label="竞品五点描述（每行一条）">
+              <el-input v-model="form.product_bullets_text" type="textarea" :rows="6" placeholder="每行填写一条五点描述" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item :label="`竞品图片 URL（最多 ${MAX_REFERENCE_IMAGES} 张，每行一个）`">
+              <el-input
+                v-model="form.product_images_text"
+                type="textarea"
+                :rows="6"
+                :placeholder="`每行一个图片 URL，最多 ${MAX_REFERENCE_IMAGES} 张`"
+              />
+              <div class="image-action-row">
+                <span class="limit-hint" :class="{ danger: manualImageCount > MAX_REFERENCE_IMAGES }">
+                  已填写 {{ manualImageCount }} / {{ MAX_REFERENCE_IMAGES }} 张
+                </span>
+                <el-button size="small" :icon="Upload" :loading="uploading" @click="fileInput?.click()">
+                  上传本地图片
+                </el-button>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="handleFiles" />
       </div>
-      <el-row :gutter="16">
-        <el-col :xs="24" :md="8">
-          <el-form-item label="竞品品牌名">
-            <el-input v-model="form.brand_name" placeholder="例如 Braun" clearable />
-          </el-form-item>
-        </el-col>
-        <el-col :xs="24" :md="16">
-          <el-form-item label="竞品标题">
-            <el-input v-model="form.product_title" type="textarea" :rows="2" placeholder="填写竞品标题" />
-          </el-form-item>
-        </el-col>
-        <el-col :xs="24" :md="12">
-          <el-form-item label="竞品五点描述（每行一条）">
-            <el-input v-model="form.product_bullets_text" type="textarea" :rows="6" placeholder="每行填写一条五点描述" />
-          </el-form-item>
-        </el-col>
-        <el-col :xs="24" :md="12">
-          <el-form-item :label="`竞品图片 URL（最多 ${MAX_REFERENCE_IMAGES} 张，每行一个）`">
-            <el-input
-              v-model="form.product_images_text"
-              type="textarea"
-              :rows="6"
-              :placeholder="`每行一个图片 URL，最多 ${MAX_REFERENCE_IMAGES} 张`"
-            />
-            <div class="limit-hint" :class="{ danger: manualImageCount > MAX_REFERENCE_IMAGES }">
-              已填写 {{ manualImageCount }} / {{ MAX_REFERENCE_IMAGES }} 张
-            </div>
-          </el-form-item>
-        </el-col>
-      </el-row>
-      <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="handleFiles" />
     </el-card>
 
     <el-card shadow="never" class="section-card">
       <template #header>
         <div class="section-head">
           <span>子模板生成清单</span>
-          <span class="section-count">共 {{ subtemplateRows.length }} 张</span>
+          <span class="section-count">
+            已选 {{ selectedSubtemplateIds.length }} / 共 {{ subtemplateRows.length }} 张
+          </span>
         </div>
       </template>
       <el-table :data="subtemplateRows" border>
@@ -432,18 +462,20 @@ onMounted(async () => {
             <span v-else class="field-hint">独立模板暂不支持单图说明</span>
           </template>
         </el-table-column>
-        <el-table-column label="当前状态" width="90" align="center">
-          <template #default>
-            <el-tag type="info" size="small" effect="light">待生成</el-tag>
+        <el-table-column label="生成" width="64" align="center">
+          <template #default="{ row }">
+            <el-checkbox v-if="row.id" v-model="selected[row.id]" />
+            <span v-else>—</span>
           </template>
+        </el-table-column>
+        <el-table-column label="当前状态" width="90" align="center">
+          <template #default>—</template>
         </el-table-column>
         <el-table-column label="生成结果" width="100" align="center">
           <template #default>—</template>
         </el-table-column>
         <el-table-column label="操作" width="80" align="center">
-          <template #default>
-            <el-tag size="small" type="info" effect="plain">提交后</el-tag>
-          </template>
+          <template #default>—</template>
         </el-table-column>
       </el-table>
     </el-card>
@@ -490,8 +522,29 @@ onMounted(async () => {
   }
 }
 
+.collapsible-head {
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapse-icon {
+  color: #909399;
+}
+
 .section-tip {
   margin: 0 0 12px;
+}
+
+.image-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+
+  .limit-hint {
+    margin-top: 0;
+  }
 }
 
 .cost-line {
