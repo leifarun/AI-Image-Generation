@@ -821,6 +821,8 @@ watch(taskId, initialize, { immediate: true })
               :src="resultUrls[resultFor(row, $index)!.id]"
               :preview-src-list="previewUrls"
               :initial-index="detail?.results.findIndex((item) => item.id === resultFor(row, $index)!.id) ?? 0"
+              :z-index="4000"
+              preview-teleported
               fit="cover"
               class="result-thumb"
             />
@@ -889,6 +891,16 @@ watch(taskId, initialize, { immediate: true })
   border: 1px solid #e4e7ed;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    height: 60px;
+    background: #fff;
+  }
 
   .title {
     font-size: 14px;
@@ -1033,5 +1045,9 @@ watch(taskId, initialize, { immediate: true })
   height: 180px;
   border-radius: 6px;
   border: 1px solid #ebeef5;
+}
+
+:global(.el-image-viewer__wrapper) {
+  z-index: 4000 !important;
 }
 </style>
