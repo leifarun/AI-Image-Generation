@@ -450,10 +450,10 @@ onMounted(async () => {
         <el-table-column label="图片名称（子模板名称）" width="200">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="模型" width="145">
+        <el-table-column label="模型" width="185">
           <template #default>{{ formatDoubaoModelLabel(form.model) }}</template>
         </el-table-column>
-        <el-table-column label="自定义说明" width="180">
+        <el-table-column label="自定义说明" width="260">
           <template #default="{ row }">
             <el-input
               v-if="row.id"
