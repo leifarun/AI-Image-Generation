@@ -57,8 +57,8 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const isAdmin = computed(() => userStore.role === 'admin')
-const isCreate = computed(() => route.params.id === 'new')
-const taskId = computed(() => String(route.params.id ?? ''))
+const isCreate = computed(() => route.name === 'task-create' || route.path === '/tasks/new')
+const taskId = computed(() => (isCreate.value ? 'new' : String(route.params.id ?? '')))
 
 const loading = ref(false)
 const submitting = ref(false)
