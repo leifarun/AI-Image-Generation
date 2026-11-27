@@ -311,12 +311,16 @@ async function handleTask(taskId: string): Promise<void> {
     console.log(`[task ${taskId}] 生成第 ${index + 1}/${imageCount} 张`)
     const child = subtemplates[index] ?? null
     const childNote = child ? (subtemplateNotes[child.id] ?? '').trim() : ''
+    const hasCustomNoteVariable = Boolean(templateContent?.includes('{{自定义说明}}'))
     const childContent = child
-      ? `${child.content}${childNote ? `\n\n【自定义说明】\n${childNote}` : ''}`
+      ? hasCustomNoteVariable
+        ? child.content
+        : `${child.content}${childNote ? `\n\n【自定义说明】\n${childNote}` : ''}`
       : ''
     const promptBase = assemblePrompt(templateContent, {
       ...ctx,
-      subtemplate_content: childContent
+      subtemplate_content: childContent,
+      custom_note: childNote
     })
     const prompt = `${promptBase}\n\n（本次只生成第 ${index + 1}/${imageCount} 张图，对应图序：${child?.name ?? `图${index + 1}`}，请严格按照上面规则执行）`
     // 由函数自己下载参考图并转为 Base64：
@@ -505,6 +509,7 @@ function assemblePrompt(
     asin: string
     marketplace: string
     subtemplate_content: string
+    custom_note?: string
   }
 ): string {
   const imageText = (ctx.images || []).filter(Boolean).join('\n')
@@ -528,6 +533,7 @@ function assemblePrompt(
     '指定子模版': subtemplateText,
     '指定子模板': subtemplateText,
     '违禁词合规红线': complianceText,
+    '自定义说明': ctx.custom_note ?? '',
     'ASIN': ctx.asin,
     '站点': ctx.marketplace
   }
@@ -536,7 +542,7 @@ function assemblePrompt(
     return `请根据以下竞品资料生成营销图：\n\n【竞品标题】\n${ctx.title || '（无）'}\n\n【竞品品牌名】\n${ctx.brand_name || '（无）'}\n\n【竞品五点描述】\n${bulletText || '（无）'}\n\n【竞品卖点补充】\n${sellingText || '（无）'}\n\n【违禁词合规红线】\n${complianceText || '（无）'}`
   }
 
-  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|子模板内容|指定子模版|指定子模板|违禁词合规红线|ASIN|站点)\}\}/g
+  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|子模板内容|指定子模版|指定子模板|违禁词合规红线|自定义说明|ASIN|站点)\}\}/g
   let resolved = template
   // 多轮替换：支持“违禁词合规红线”字段内部再引用竞品品牌名等变量。
   for (let pass = 0; pass < 4; pass++) {
