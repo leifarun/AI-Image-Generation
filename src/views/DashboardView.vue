@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
@@ -22,6 +22,8 @@ interface StatCard {
   filter?: DashboardTaskFilter
 }
 
+defineOptions({ name: 'DashboardView' })
+
 const router = useRouter()
 const userStore = useUserStore()
 const dashboardLoading = ref(false)
@@ -43,6 +45,8 @@ const selectedFilter = ref<DashboardTaskFilter>('all')
 const tableCardRef = ref<HTMLElement>()
 const chartRef = ref<HTMLElement>()
 let chartInstance: echarts.ECharts | null = null
+let lastLoadedAt = 0
+const CACHE_TTL_MS = 30_000
 
 const filterOptions: Array<{ label: string; value: DashboardTaskFilter }> = [
   { label: '全部', value: 'all' },
@@ -156,9 +160,20 @@ async function loadAll() {
   await Promise.all([loadSummary(), loadTasks()])
   await nextTick()
   renderStatusChart()
+  lastLoadedAt = Date.now()
 }
 
-onMounted(loadAll)
+onMounted(() => {
+  loadAll()
+})
+
+onActivated(() => {
+  if (Date.now() - lastLoadedAt > CACHE_TTL_MS) {
+    loadAll()
+  } else {
+    nextTick(() => renderStatusChart())
+  }
+})
 
 onBeforeUnmount(() => {
   chartInstance?.dispose()

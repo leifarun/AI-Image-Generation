@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleClose, Search } from '@element-plus/icons-vue'
@@ -9,8 +9,6 @@ import dayjs from 'dayjs'
 import {
   fetchTasks,
   deleteTask,
-  retryTask,
-  updateTaskRemark,
   type TaskRow
 } from '@/api/tasks'
 import { TASK_STATUS_LIST, getStatusLabel } from '@/constants/task'
@@ -18,8 +16,8 @@ import { MARKETPLACE_OPTIONS, formatMarketplaceLabel } from '@/constants/marketp
 import { calcActualCost, formatDoubaoModelLabel, formatMoney } from '@/constants/pricing'
 import { formatDateTime } from '@/utils/datetime'
 import { useUserStore } from '@/stores/user'
-import PromptDialog from '@/views/tasks/PromptDialog.vue'
-import ProductDataDialog from '@/views/tasks/ProductDataDialog.vue'
+
+defineOptions({ name: 'TaskListView' })
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -52,13 +50,8 @@ const tableData = ref<TaskRow[]>([])
 const loading = ref(false)
 const total = ref(0)
 const page = reactive({ current: 1, size: 20 })
-
-const currentTask = ref<TaskRow | null>(null)
-const promptVisible = ref(false)
-const productVisible = ref(false)
-const remarkVisible = ref(false)
-const remarkDraft = ref('')
-const remarkTask = ref<TaskRow | null>(null)
+let lastLoadedAt = 0
+const CACHE_TTL_MS = 30_000
 
 async function loadData() {
   loading.value = true
@@ -80,6 +73,7 @@ async function loadData() {
     ElMessage.error(e instanceof Error ? e.message : '加载任务失败')
   } finally {
     loading.value = false
+    lastLoadedAt = Date.now()
   }
 }
 
@@ -184,62 +178,8 @@ async function handleDelete(row: TaskRow) {
   }
 }
 
-function openPrompt(row: TaskRow) {
-  currentTask.value = row
-  promptVisible.value = true
-}
-
-function openProduct(row: TaskRow) {
-  currentTask.value = row
-  productVisible.value = true
-}
-
-function openRemark(row: TaskRow) {
-  remarkTask.value = row
-  remarkDraft.value = row.remark ?? ''
-  remarkVisible.value = true
-}
-
-async function saveRemark() {
-  if (!remarkTask.value) return
-  try {
-    await updateTaskRemark(remarkTask.value.id, remarkDraft.value)
-    remarkTask.value.remark = remarkDraft.value.trim() || null
-    ElMessage.success('备注已保存')
-    remarkVisible.value = false
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '备注保存失败')
-  }
-}
-
 function openResults(row: TaskRow) {
   router.push(`/tasks/${row.id}`)
-}
-
-async function handleRetry(row: TaskRow) {
-  try {
-    await ElMessageBox.confirm(
-      `确定重做该任务（ASIN: ${row.asin}）吗？将按最新竞品资料重新生成图片，可能产生模型调用费用。`,
-      '确认重做任务？',
-      {
-        type: 'warning',
-        confirmButtonText: '确认重做',
-        cancelButtonText: '取消',
-        closeOnClickModal: false,
-        closeOnPressEscape: false,
-        showClose: false
-      }
-    )
-  } catch {
-    return
-  }
-  try {
-    await retryTask(row.id)
-    ElMessage.success('已重新排队，等待生成')
-    loadData()
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '重做失败')
-  }
 }
 
 function handlePageChange({ currentPage, pageSize }: { currentPage: number; pageSize: number }) {
@@ -248,7 +188,18 @@ function handlePageChange({ currentPage, pageSize }: { currentPage: number; page
   loadData()
 }
 
-onMounted(loadData)
+function autoLoad() {
+  if (Date.now() - lastLoadedAt > CACHE_TTL_MS) loadData()
+}
+
+onMounted(() => {
+  loadData()
+})
+
+onActivated(() => {
+  autoLoad()
+  gridRef.value?.recalculate()
+})
 
 const gridOptions = reactive<VxeGridProps>({
   border: true,
@@ -267,9 +218,6 @@ const gridOptions = reactive<VxeGridProps>({
     { field: 'template_name', title: '模板', minWidth: 105, showOverflow: true },
     { field: 'model', title: '模型', width: 132, formatter: ({ row }) => modelText(row) },
     { title: '实际成本', width: 86, visible: isAdmin.value, slots: { default: 'cost' } },
-    { title: '备注', width: 150, showOverflow: true, slots: { default: 'remark' } },
-    { title: '组装后的 AI 指令', width: 124, visible: isAdmin.value, slots: { default: 'prompt' } },
-    { title: '竞品资料', width: 92, slots: { default: 'product' } },
     {
       field: 'status',
       title: '当前状态',
@@ -286,7 +234,7 @@ const gridOptions = reactive<VxeGridProps>({
     { title: '生成结果', width: 92, fixed: 'right', slots: { default: 'results' } },
     {
       title: '操作',
-      width: 122,
+      width: 82,
       fixed: 'right',
       showOverflow: false,
       slots: { default: 'action' }
@@ -415,24 +363,10 @@ watch(gridHeight, (height) => {
         <template #cost="{ row }">
           {{ formatMoney(calcActualCost(row.result_models, row.result_reference_counts)) }}
         </template>
-        <template #remark="{ row }">
-          <div class="remark-cell">
-            <span class="remark-text" :title="row.remark">{{ row.remark || '—' }}</span>
-            <el-button link type="primary" size="small" @click="openRemark(row)">编辑</el-button>
-          </div>
-        </template>
-        <template #prompt="{ row }">
-          <el-button v-if="isAdmin" link type="primary" size="small" @click="openPrompt(row)">查看</el-button>
-          <span v-else class="no-auth">无权限</span>
-        </template>
-        <template #product="{ row }">
-          <el-button link type="primary" size="small" @click="openProduct(row)">查看</el-button>
-        </template>
         <template #results="{ row }">
           <el-button link type="primary" size="small" @click="openResults(row)">查看</el-button>
         </template>
         <template #action="{ row }">
-          <el-button link type="warning" size="small" @click="handleRetry(row)">重做</el-button>
           <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
         </template>
         <template #empty>
@@ -441,26 +375,6 @@ watch(gridHeight, (height) => {
       </vxe-grid>
     </el-card>
 
-    <PromptDialog v-model="promptVisible" :prompt="currentTask?.prompt_assembled ?? null" />
-    <ProductDataDialog
-      v-model="productVisible"
-      :task="currentTask"
-      @saved="loadData"
-    />
-    <el-dialog v-model="remarkVisible" title="任务备注" width="520px">
-      <el-input
-        v-model="remarkDraft"
-        type="textarea"
-        :rows="5"
-        maxlength="1000"
-        show-word-limit
-        placeholder="写一些关于这个任务的笔记"
-      />
-      <template #footer>
-        <el-button @click="remarkVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveRemark">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -485,11 +399,6 @@ watch(gridHeight, (height) => {
     flex-direction: column;
     min-height: 0;
   }
-}
-
-.no-auth {
-  color: #c0c4cc;
-  font-size: 12px;
 }
 
 .table-toolbar {
@@ -584,22 +493,6 @@ watch(gridHeight, (height) => {
 
 .progress-done {
   color: #67c23a;
-}
-
-.remark-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.remark-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #606266;
 }
 
 .create-button {

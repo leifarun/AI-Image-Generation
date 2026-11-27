@@ -102,7 +102,11 @@ async function handleCommand(command: string) {
       />
 
       <main class="content">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <keep-alive include="DashboardView,TaskListView">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </main>
     </div>
   </div>
