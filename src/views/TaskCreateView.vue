@@ -365,7 +365,7 @@ onMounted(async () => {
               <el-input v-model="form.remark" maxlength="1000" show-word-limit placeholder="可选，记录这条任务的说明" />
             </el-form-item>
           </el-col>
-          <el-col :xs="24">
+          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="竞品卖点补充（可选，每行一条）">
               <el-input
                 v-model="form.selling_points"
@@ -387,7 +387,7 @@ onMounted(async () => {
             <ArrowRight v-else />
           </el-icon>
           <span>竞品资料</span>
-          <span class="section-count">点击展开 / 收起</span>
+          <span class="collapse-hint">&gt; 点击展开 / 收起</span>
         </div>
       </template>
       <div v-show="productPanelOpen">
@@ -462,7 +462,7 @@ onMounted(async () => {
             <span v-else class="field-hint">独立模板暂不支持单图说明</span>
           </template>
         </el-table-column>
-        <el-table-column label="生成" width="64" align="center">
+        <el-table-column label="开关" width="64" align="center">
           <template #default="{ row }">
             <el-checkbox v-if="row.id" v-model="selected[row.id]" />
             <span v-else>—</span>
@@ -529,6 +529,11 @@ onMounted(async () => {
 
 .collapse-icon {
   color: #909399;
+}
+
+.collapse-hint {
+  color: #909399;
+  font-size: 12px;
 }
 
 .section-tip {
