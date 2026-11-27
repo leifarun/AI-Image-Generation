@@ -98,7 +98,11 @@ function resultFor(row: unknown, index: number): DetailResult | undefined {
   const current = row as SubtemplateRow
   const results = detail.value?.results ?? []
   if (current.id) {
-    return results.find((r) => r.subtemplate_id === current.id)
+    const exact = results.find((r) => r.subtemplate_id === current.id)
+    if (exact) return exact
+    // 历史任务的结果图没有 subtemplate_id，按生成顺序回退匹配。
+    const legacy = results[index]
+    if (legacy && !legacy.subtemplate_id) return legacy
   }
   return results[index]
 }
@@ -520,10 +524,10 @@ onMounted(load)
 
       <el-table :data="subtemplateRows" border class="subtemplate-table">
         <el-table-column type="index" label="#" width="48" align="center" />
-        <el-table-column label="图片名称（子模板名称）" width="150">
+        <el-table-column label="图片名称（子模板名称）" width="200">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="模型" width="132">
+        <el-table-column label="模型" width="145">
           <template #default="{ row, $index }">
             {{ formatDoubaoModelLabel(resultFor(row, $index)?.model || detail.model) }}
           </template>
@@ -546,7 +550,7 @@ onMounted(load)
             <StatusTag :status="rowStatus(row, $index)" />
           </template>
         </el-table-column>
-        <el-table-column label="生成结果" width="110" align="center">
+        <el-table-column label="生成结果" width="220" align="center">
           <template #default="{ row, $index }">
             <el-image
               v-if="resultFor(row, $index)"
@@ -650,7 +654,7 @@ onMounted(load)
 
 .subtemplate-table {
   :deep(.el-table__row) {
-    height: 88px;
+    height: 196px;
   }
 
   :deep(.el-table__cell) {
@@ -659,6 +663,7 @@ onMounted(load)
 
   :deep(.el-table__cell .cell) {
     line-height: 1.4;
+    white-space: nowrap;
   }
 
   :deep(.el-textarea__inner) {
@@ -716,8 +721,8 @@ onMounted(load)
 }
 
 .result-thumb {
-  width: 72px;
-  height: 72px;
+  width: 180px;
+  height: 180px;
   border-radius: 6px;
   border: 1px solid #ebeef5;
 }

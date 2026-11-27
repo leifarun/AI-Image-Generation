@@ -447,10 +447,10 @@ onMounted(async () => {
       </template>
       <el-table :data="subtemplateRows" border class="subtemplate-table">
         <el-table-column type="index" label="#" width="48" align="center" />
-        <el-table-column label="图片名称（子模板名称）" width="150">
+        <el-table-column label="图片名称（子模板名称）" width="200">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="模型" width="132">
+        <el-table-column label="模型" width="145">
           <template #default>{{ formatDoubaoModelLabel(form.model) }}</template>
         </el-table-column>
         <el-table-column label="自定义说明" width="180">
@@ -546,6 +546,7 @@ onMounted(async () => {
 
   :deep(.el-table__cell .cell) {
     line-height: 1.4;
+    white-space: nowrap;
   }
 
   :deep(.el-textarea__inner) {
