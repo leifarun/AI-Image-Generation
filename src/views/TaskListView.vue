@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleClose, Search } from '@element-plus/icons-vue'
 import type { VxeGridProps, VxeGridInstance } from 'vxe-table'
@@ -7,7 +8,6 @@ import { useWindowSize } from '@vueuse/core'
 import dayjs from 'dayjs'
 import {
   fetchTasks,
-  fetchTaskDetail,
   deleteTask,
   retryTask,
   updateTaskRemark,
@@ -18,12 +18,11 @@ import { MARKETPLACE_OPTIONS, formatMarketplaceLabel } from '@/constants/marketp
 import { calcActualCost, formatDoubaoModelLabel, formatMoney } from '@/constants/pricing'
 import { formatDateTime } from '@/utils/datetime'
 import { useUserStore } from '@/stores/user'
-import CreateTaskDrawer from '@/views/tasks/CreateTaskDrawer.vue'
 import PromptDialog from '@/views/tasks/PromptDialog.vue'
 import ProductDataDialog from '@/views/tasks/ProductDataDialog.vue'
-import ResultsDialog from '@/views/tasks/ResultsDialog.vue'
 
 const userStore = useUserStore()
+const router = useRouter()
 const isAdmin = computed(() => userStore.role === 'admin')
 const gridRef = ref<VxeGridInstance>()
 const { width: viewportWidth, height: viewportHeight } = useWindowSize()
@@ -54,12 +53,9 @@ const loading = ref(false)
 const total = ref(0)
 const page = reactive({ current: 1, size: 20 })
 
-const createDrawerVisible = ref(false)
 const currentTask = ref<TaskRow | null>(null)
 const promptVisible = ref(false)
 const productVisible = ref(false)
-const resultsVisible = ref(false)
-const resultImagePaths = ref<string[]>([])
 const remarkVisible = ref(false)
 const remarkDraft = ref('')
 const remarkTask = ref<TaskRow | null>(null)
@@ -216,16 +212,8 @@ async function saveRemark() {
   }
 }
 
-async function openResults(row: TaskRow) {
-  currentTask.value = row
-  resultImagePaths.value = []
-  resultsVisible.value = true
-  try {
-    const detail = await fetchTaskDetail(row.id)
-    resultImagePaths.value = detail.results.map((r) => r.image_path)
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '生成结果加载失败')
-  }
+function openResults(row: TaskRow) {
+  router.push(`/tasks/${row.id}`)
 }
 
 async function handleRetry(row: TaskRow) {
@@ -257,12 +245,6 @@ async function handleRetry(row: TaskRow) {
 function handlePageChange({ currentPage, pageSize }: { currentPage: number; pageSize: number }) {
   page.current = currentPage
   page.size = pageSize
-  loadData()
-}
-
-function handleCreated() {
-  createDrawerVisible.value = false
-  page.current = 1
   loadData()
 }
 
@@ -411,7 +393,7 @@ watch(gridHeight, (height) => {
 
         <el-button class="reset-button" @click="handleReset">重置</el-button>
         <el-button class="export-button" @click="exportCsv">导出 CSV</el-button>
-        <el-button type="primary" class="create-button" @click="createDrawerVisible = true">新建任务</el-button>
+        <el-button type="primary" class="create-button" @click="router.push('/tasks/new')">新建任务</el-button>
       </div>
 
       <vxe-grid
@@ -459,19 +441,12 @@ watch(gridHeight, (height) => {
       </vxe-grid>
     </el-card>
 
-    <CreateTaskDrawer v-model="createDrawerVisible" @created="handleCreated" />
     <PromptDialog v-model="promptVisible" :prompt="currentTask?.prompt_assembled ?? null" />
     <ProductDataDialog
       v-model="productVisible"
       :task="currentTask"
       @saved="loadData"
     />
-    <ResultsDialog
-      v-model="resultsVisible"
-      :task-id="currentTask?.id ?? ''"
-      :image-paths="resultImagePaths"
-    />
-
     <el-dialog v-model="remarkVisible" title="任务备注" width="520px">
       <el-input
         v-model="remarkDraft"

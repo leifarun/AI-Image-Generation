@@ -29,6 +29,12 @@ const router = createRouter({
           meta: { title: '生成任务' }
         },
         {
+          path: 'tasks/new',
+          name: 'task-create',
+          component: () => import('@/views/TaskCreateView.vue'),
+          meta: { title: '新建任务' }
+        },
+        {
           path: 'tasks/:id',
           name: 'task-detail',
           component: () => import('@/views/TaskDetailView.vue'),

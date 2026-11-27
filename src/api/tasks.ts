@@ -16,6 +16,7 @@ export interface TaskRow {
   product_bullets: string[] | null
   product_images: string[] | null
   subtemplate_ids: string[] | null
+  subtemplate_notes: Record<string, string> | null
   remark: string | null
   status: string
   error_message: string | null
@@ -24,6 +25,7 @@ export interface TaskRow {
   result_count: number
   result_models: string[] | null
   result_reference_counts: number[] | null
+  result_subtemplate_ids: Array<string | null> | null
   created_by: string
   created_at: string
   updated_at: string
@@ -87,8 +89,10 @@ export interface CreateTaskInput {
   asin: string
   marketplace: string
   selling_points: string
+  remark?: string
   template_id: string | null
   subtemplate_ids?: string[]
+  subtemplate_notes?: Record<string, string>
   model?: string
   product_title?: string
   brand_name?: string
@@ -130,10 +134,12 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
       asin: input.asin.trim(),
       marketplace: input.marketplace,
       selling_points: input.selling_points.trim(),
+      remark: input.remark?.trim() || null,
       template_id: input.template_id,
       model,
       image_count: imageCount,
       subtemplate_ids: input.subtemplate_ids ?? [],
+      subtemplate_notes: input.subtemplate_notes ?? {},
       product_title: productTitle || null,
       brand_name: brandName || null,
       product_bullets: productBullets.length ? productBullets : null,
@@ -154,7 +160,17 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
 }
 
 /** 任务详情（查视图拿模板名/提交人，另查结果图片列表） */
-export async function fetchTaskDetail(id: string): Promise<TaskRow & { results: Array<{ id: string; image_path: string; model: string | null; reference_count: number }> }> {
+export async function fetchTaskDetail(id: string): Promise<
+  TaskRow & {
+    results: Array<{
+      id: string
+      image_path: string
+      model: string | null
+      reference_count: number
+      subtemplate_id: string | null
+    }>
+  }
+> {
   const supabase = requireSupabase()
 
   const { data, error } = await supabase
@@ -166,7 +182,7 @@ export async function fetchTaskDetail(id: string): Promise<TaskRow & { results: 
 
   const { data: results, error: resError } = await supabase
     .from('task_results')
-    .select('id, image_path, model, reference_count')
+    .select('id, image_path, model, reference_count, subtemplate_id')
     .eq('task_id', id)
     .order('created_at', { ascending: true })
   if (resError) throw new Error(resError.message)
@@ -178,6 +194,7 @@ export async function fetchTaskDetail(id: string): Promise<TaskRow & { results: 
       image_path: string
       model: string | null
       reference_count: number
+      subtemplate_id: string | null
     }>
   }
 }
@@ -253,10 +270,36 @@ export async function updateTaskRemark(id: string, remark: string): Promise<void
   if (error) throw new Error(error.message)
 }
 
+/** 保存每个子模板的自定义说明（会追加到对应子模板内容里） */
+export async function updateTaskSubtemplateNotes(
+  id: string,
+  notes: Record<string, string>
+): Promise<void> {
+  const supabase = requireSupabase()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ subtemplate_notes: notes })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
 /** 重做任务：重置为排队/待抓取，并触发一次处理器 */
 export async function retryTask(id: string): Promise<void> {
   const supabase = requireSupabase()
   const { error } = await supabase.rpc('retry_task', { p_task_id: id })
+  if (error) throw new Error(error.message)
+  void supabase.functions.invoke('process-task').catch(() => {
+    // 触发失败不影响任务状态（cron 也会兜底）
+  })
+}
+
+/** 只重做某一个子模板对应的图片 */
+export async function retryTaskImage(id: string, subtemplateId: string): Promise<void> {
+  const supabase = requireSupabase()
+  const { error } = await supabase.rpc('retry_task_image', {
+    p_task_id: id,
+    p_subtemplate_id: subtemplateId
+  })
   if (error) throw new Error(error.message)
   void supabase.functions.invoke('process-task').catch(() => {
     // 触发失败不影响任务状态（cron 也会兜底）

@@ -49,6 +49,7 @@ interface TaskRow {
   prompt_assembled: string | null
   image_count: number
   subtemplate_ids: string[] | null
+  subtemplate_notes: Record<string, string> | null
 }
 
 interface RuntimeSettings {
@@ -196,6 +197,10 @@ async function handleTask(taskId: string): Promise<void> {
   const subtemplateIds = Array.isArray(t.subtemplate_ids)
     ? t.subtemplate_ids.filter((id): id is string => typeof id === 'string' && Boolean(id))
     : []
+  const subtemplateNotes: Record<string, string> =
+    t.subtemplate_notes && typeof t.subtemplate_notes === 'object'
+      ? t.subtemplate_notes
+      : {}
   const subtemplates: Array<{ id: string; name: string; content: string }> = []
   for (const id of subtemplateIds) {
     const { data: sub } = await supabase
@@ -254,7 +259,10 @@ async function handleTask(taskId: string): Promise<void> {
     asin: t.asin,
     marketplace: t.marketplace,
     subtemplate_content: subtemplates
-      .map((s) => `【${s.name}】\n${s.content}`)
+      .map((s) => {
+        const note = (subtemplateNotes[s.id] ?? '').trim()
+        return `【${s.name}】\n${s.content}${note ? `\n\n【自定义说明】\n${note}` : ''}`
+      })
       .join('\n\n')
   }
 
@@ -263,18 +271,35 @@ async function handleTask(taskId: string): Promise<void> {
 
   await supabase.from('tasks').update({ prompt_assembled: basePrompt }).eq('id', taskId)
 
-  // 5. 每次调用只生成下一张，避免多图任务超过函数执行时限
+  // 5. 每次调用只生成下一张，避免多图任务超过函数执行时限。
+  //    多图任务按“第一个还没有结果的子模板”顺序生成，支持单张重做。
   try {
-    const { count: doneCount, error: countError } = await supabase
+    const { data: existingResults, error: resultsError } = await supabase
       .from('task_results')
-      .select('id', { count: 'exact', head: true })
+      .select('id, subtemplate_id')
       .eq('task_id', taskId)
-    if (countError) throw new Error(`统计已生成图片失败：${countError.message}`)
+      .order('created_at', { ascending: true })
+    if (resultsError) throw new Error(`读取已生成图片失败：${resultsError.message}`)
 
-    const generated = doneCount ?? 0
+    const generated = existingResults?.length ?? 0
     console.log(`[task ${taskId}] 已生成 ${generated}/${imageCount} 张`)
 
-    if (generated >= imageCount) {
+    let index = -1
+    if (subtemplates.length) {
+      const hasMappedResults = (existingResults ?? []).some((r) => Boolean(r.subtemplate_id))
+      if (!hasMappedResults) {
+        // 历史任务的结果没有子模板关联，继续按生成数量顺序推进。
+        index = generated < imageCount ? generated : -1
+      } else {
+        index = subtemplates.findIndex(
+          (s) => !(existingResults ?? []).some((r) => r.subtemplate_id === s.id)
+        )
+      }
+    } else {
+      index = generated < imageCount ? generated : -1
+    }
+
+    if (index < 0) {
       console.log(`[task ${taskId}] 图片已全部生成，标记完成`)
       await supabase.from('tasks').update({
         status: 'succeeded',
@@ -283,12 +308,15 @@ async function handleTask(taskId: string): Promise<void> {
       return
     }
 
-    const index = generated
     console.log(`[task ${taskId}] 生成第 ${index + 1}/${imageCount} 张`)
     const child = subtemplates[index] ?? null
+    const childNote = child ? (subtemplateNotes[child.id] ?? '').trim() : ''
+    const childContent = child
+      ? `${child.content}${childNote ? `\n\n【自定义说明】\n${childNote}` : ''}`
+      : ''
     const promptBase = assemblePrompt(templateContent, {
       ...ctx,
-      subtemplate_content: child?.content ?? ''
+      subtemplate_content: childContent
     })
     const prompt = `${promptBase}\n\n（本次只生成第 ${index + 1}/${imageCount} 张图，对应图序：${child?.name ?? `图${index + 1}`}，请严格按照上面规则执行）`
     // 由函数自己下载参考图并转为 Base64：
@@ -335,12 +363,19 @@ async function handleTask(taskId: string): Promise<void> {
       task_id: taskId,
       image_path: savedPath,
       model: doubaoModel,
-      reference_count: referenceImages.length
+      reference_count: referenceImages.length,
+      subtemplate_id: child?.id ?? null
     })
 
-    const nextTotal = generated + 1
-    if (nextTotal >= imageCount) {
-      console.log(`[task ${taskId}] 全部生成完成，共 ${nextTotal} 张`)
+    const allDone = subtemplates.length
+      ? subtemplates.every(
+          (s) =>
+            s.id === child?.id ||
+            (existingResults ?? []).some((r) => r.subtemplate_id === s.id)
+        )
+      : generated + 1 >= imageCount
+    if (allDone) {
+      console.log(`[task ${taskId}] 全部生成完成，共 ${generated + 1} 张`)
       await supabase.from('tasks').update({
         status: 'succeeded',
         completed_at: new Date().toISOString()
