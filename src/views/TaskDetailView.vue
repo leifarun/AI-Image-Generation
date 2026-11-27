@@ -6,8 +6,6 @@ import { Download, Upload } from '@element-plus/icons-vue'
 import JSZip from 'jszip'
 import {
   fetchTaskDetail,
-  deleteTask,
-  retryTask,
   retryTaskImage,
   updateTaskProductData,
   updateTaskSubtemplateNotes,
@@ -50,7 +48,7 @@ const templates = ref<SopTemplateRow[]>([])
 const resultUrls = ref<Record<string, string>>({})
 
 const showPrompt = ref(false)
-const savingNotes = ref(false)
+const savingTask = ref(false)
 const downloadingZip = ref(false)
 const notes = reactive<Record<string, string>>({})
 
@@ -60,7 +58,6 @@ const productForm = reactive({
   product_bullets_text: '',
   product_images_text: ''
 })
-const productSaving = ref(false)
 const uploading = ref(false)
 const fileInput = ref<HTMLInputElement>()
 
@@ -76,6 +73,7 @@ const productEditable = computed(() => {
   const allowed = ['pending_fetch', 'queued', 'need_input', 'failed', 'succeeded']
   return (isAdmin.value || isOwner.value) && allowed.includes(detail.value.status)
 })
+const canSaveTask = computed(() => isAdmin.value || isOwner.value)
 
 const subtemplateRows = computed<SubtemplateRow[]>(() => {
   if (!detail.value) return []
@@ -229,7 +227,7 @@ async function load() {
   }
 }
 
-async function saveNotes() {
+async function saveAll() {
   if (!detail.value) return
   const payload: Record<string, string> = {}
   for (const row of subtemplateRows.value) {
@@ -237,14 +235,35 @@ async function saveNotes() {
       payload[row.id] = notes[row.id].trim()
     }
   }
-  savingNotes.value = true
+  const images = productForm.product_images_text
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (images.length > MAX_REFERENCE_IMAGES) {
+    ElMessage.warning(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
+    return
+  }
+
+  savingTask.value = true
   try {
+    if (productEditable.value) {
+      await updateTaskProductData(detail.value.id, {
+        product_title: productForm.product_title.trim(),
+        brand_name: productForm.brand_name.trim(),
+        product_bullets: productForm.product_bullets_text
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        product_images: images
+      })
+    }
     await updateTaskSubtemplateNotes(detail.value.id, payload)
-    ElMessage.success('自定义说明已保存')
+    ElMessage.success('任务已保存')
+    await load()
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '保存失败')
   } finally {
-    savingNotes.value = false
+    savingTask.value = false
   }
 }
 
@@ -281,72 +300,6 @@ async function handleFiles(event: Event) {
   }
 }
 
-async function saveProduct() {
-  if (!detail.value || !productEditable.value) return
-  const images = productForm.product_images_text
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (images.length > MAX_REFERENCE_IMAGES) {
-    ElMessage.warning(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
-    return
-  }
-  productSaving.value = true
-  try {
-    await updateTaskProductData(detail.value.id, {
-      product_title: productForm.product_title.trim(),
-      brand_name: productForm.brand_name.trim(),
-      product_bullets: productForm.product_bullets_text
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean),
-      product_images: images
-    })
-    ElMessage.success('竞品资料已保存')
-    await load()
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '保存失败')
-  } finally {
-    productSaving.value = false
-  }
-}
-
-async function handleDelete() {
-  try {
-    await ElMessageBox.confirm('确定删除该任务吗？删除后结果图片也将一并删除。', '删除确认', {
-      type: 'warning'
-    })
-  } catch {
-    return
-  }
-  try {
-    await deleteTask(taskId.value)
-    ElMessage.success('已删除')
-    router.push('/tasks')
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '删除失败')
-  }
-}
-
-async function handleRetry() {
-  try {
-    await ElMessageBox.confirm(
-      '将忽略已有结果并从第 1 张重新生成，可能产生模型调用费用。确定继续吗？',
-      '重新生成确认',
-      { type: 'warning' }
-    )
-  } catch {
-    return
-  }
-  try {
-    await retryTask(taskId.value)
-    ElMessage.success('任务已重新排队')
-    await load()
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '重新生成失败')
-  }
-}
-
 async function handleRetryRow(row: unknown) {
   const current = row as SubtemplateRow
   if (!current.id || !detail.value) return
@@ -373,25 +326,23 @@ onMounted(load)
 
 <template>
   <div v-loading="loading" class="task-detail">
-    <el-card v-if="detail" shadow="never" class="section-card">
-      <template #header>
-        <div class="card-head">
-          <el-button size="small" @click="router.push('/tasks')">返回列表</el-button>
-          <span class="title">任务详情</span>
-          <div class="head-actions">
-            <el-button
-              v-if="['failed', 'succeeded', 'need_input'].includes(detail.status)"
-              type="warning"
-              size="small"
-              @click="handleRetry"
-            >
-              全部重做
-            </el-button>
-            <el-button type="danger" size="small" @click="handleDelete">删除任务</el-button>
-          </div>
-        </div>
-      </template>
+    <div v-if="detail" class="detail-toolbar">
+      <el-button size="small" @click="router.push('/tasks')">返回列表</el-button>
+      <span class="title">任务详情</span>
+      <div class="head-actions">
+        <el-button
+          type="primary"
+          size="small"
+          :loading="savingTask"
+          :disabled="!canSaveTask"
+          @click="saveAll"
+        >
+          保存任务
+        </el-button>
+      </div>
+    </div>
 
+    <el-card v-if="detail" shadow="never" class="section-card">
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="ASIN">{{ detail.asin }}</el-descriptions-item>
         <el-descriptions-item label="站点">{{ detail.marketplace }}</el-descriptions-item>
@@ -436,15 +387,6 @@ onMounted(load)
               @click="fileInput?.click()"
             >
               上传本地图片
-            </el-button>
-            <el-button
-              v-if="productEditable"
-              type="primary"
-              size="small"
-              :loading="productSaving"
-              @click="saveProduct"
-            >
-              保存竞品资料
             </el-button>
           </div>
         </div>
@@ -514,9 +456,6 @@ onMounted(load)
               @click="downloadBatch"
             >
               批量下载
-            </el-button>
-            <el-button type="primary" size="small" :loading="savingNotes" @click="saveNotes">
-              保存自定义说明
             </el-button>
           </div>
         </div>
@@ -617,14 +556,22 @@ onMounted(load)
   }
 }
 
-.card-head {
+.detail-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 
   .title {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 500;
   }
 
   .head-actions {
