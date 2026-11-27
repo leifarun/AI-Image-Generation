@@ -365,12 +365,12 @@ onMounted(async () => {
               <el-input v-model="form.remark" maxlength="1000" show-word-limit placeholder="可选，记录这条任务的说明" />
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :md="8">
+          <el-col :xs="24">
             <el-form-item label="竞品卖点补充（可选，每行一条）">
               <el-input
                 v-model="form.selling_points"
                 type="textarea"
-                :rows="2"
+                :autosize="{ minRows: 1, maxRows: 6 }"
                 placeholder="竞品需要补充或重点强调的卖点，例如：加厚防滑&#10;兼容多种墙面&#10;安装无需专业工具"
               />
             </el-form-item>
