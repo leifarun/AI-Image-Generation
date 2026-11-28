@@ -72,6 +72,8 @@ const resizeHint = reactive({ visible: false, x: 0, y: 0, width: 0 })
 const fileInput = ref<HTMLInputElement>()
 let resizeHintTimer: ReturnType<typeof setTimeout> | null = null
 let removeResizeListeners: (() => void) | null = null
+let taskPollTimer: ReturnType<typeof setTimeout> | null = null
+let detailRefreshInFlight = false
 
 const templates = ref<SopTemplateRow[]>([])
 const detail = ref<Awaited<ReturnType<typeof fetchTaskDetail>> | null>(null)
@@ -234,7 +236,31 @@ const productEditable = computed(() => {
   const allowed = ['pending_fetch', 'queued', 'need_input', 'failed', 'succeeded']
   return (isAdmin.value || isOwner.value) && allowed.includes(detail.value.status)
 })
-const canSaveTask = computed(() => (isCreate.value ? true : isAdmin.value || isOwner.value))
+const canSaveTask = computed(() => {
+  if (isCreate.value) return true
+  if (!detail.value) return false
+  const processing = ['fetching', 'generating'].includes(detail.value.status)
+  return (isAdmin.value || isOwner.value) && !processing
+})
+
+const productDirty = computed(() => {
+  if (isCreate.value) return true
+  if (!detail.value) return false
+  const bullets = productForm.product_bullets_text
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const images = productForm.product_images_text
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return (
+    productForm.product_title.trim() !== (detail.value.product_title ?? '').trim() ||
+    productForm.brand_name.trim() !== (detail.value.brand_name ?? '').trim() ||
+    bullets.join('\n') !== (detail.value.product_bullets ?? []).join('\n') ||
+    images.join('\n') !== (detail.value.product_images ?? []).join('\n')
+  )
+})
 
 function resetCreateSelections() {
   for (const key of Object.keys(notes)) delete notes[key]
@@ -347,10 +373,24 @@ function populateDetailFields(taskDetail: NonNullable<typeof detail.value>) {
     }
   }
 
+  populateProductForm(taskDetail)
+}
+
+function populateProductForm(taskDetail: NonNullable<typeof detail.value>) {
   productForm.product_title = taskDetail.product_title ?? ''
   productForm.brand_name = taskDetail.brand_name ?? ''
   productForm.product_bullets_text = (taskDetail.product_bullets ?? []).join('\n')
   productForm.product_images_text = (taskDetail.product_images ?? []).join('\n')
+}
+
+async function resolveDetailResultUrls(taskDetail: NonNullable<typeof detail.value>) {
+  const urls = await resolveTaskResultUrls(
+    (taskDetail.results ?? []).map((item) => item.image_path)
+  )
+  resultUrls.value = {}
+  ;(taskDetail.results ?? []).forEach((result, index) => {
+    resultUrls.value[result.id] = urls[index] ?? result.image_path
+  })
 }
 
 async function initializeDetail() {
@@ -361,14 +401,8 @@ async function initializeDetail() {
   detail.value = taskDetail
   templates.value = allTemplates
   populateDetailFields(taskDetail)
-
-  const urls = await resolveTaskResultUrls(
-    (taskDetail.results ?? []).map((item) => item.image_path)
-  )
-  resultUrls.value = {}
-  ;(taskDetail.results ?? []).forEach((result, index) => {
-    resultUrls.value[result.id] = urls[index] ?? result.image_path
-  })
+  await resolveDetailResultUrls(taskDetail)
+  scheduleTaskPoll()
 }
 
 async function initialize() {
@@ -383,6 +417,36 @@ async function initialize() {
     ElMessage.error(e instanceof Error ? e.message : '加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+function taskIsProcessing(status: string | null | undefined): boolean {
+  return ['pending_fetch', 'fetching', 'queued', 'generating'].includes(status ?? '')
+}
+
+function scheduleTaskPoll() {
+  if (taskPollTimer) clearTimeout(taskPollTimer)
+  taskPollTimer = null
+  if (isCreate.value || !taskIsProcessing(detail.value?.status)) return
+  taskPollTimer = setTimeout(() => {
+    void refreshDetailSilently()
+  }, 6000)
+}
+
+async function refreshDetailSilently() {
+  if (isCreate.value || detailRefreshInFlight) return
+  detailRefreshInFlight = true
+  const preserveProductEdits = productDirty.value
+  try {
+    const taskDetail = await fetchTaskDetail(taskId.value)
+    detail.value = taskDetail
+    if (!preserveProductEdits) populateProductForm(taskDetail)
+    await resolveDetailResultUrls(taskDetail)
+  } catch {
+    // 静默刷新失败时不打断当前编辑，下一轮继续尝试。
+  } finally {
+    detailRefreshInFlight = false
+    scheduleTaskPoll()
   }
 }
 
@@ -572,6 +636,10 @@ async function submitCreate() {
 
 async function saveAll() {
   if (!detail.value) return
+  if (['fetching', 'generating'].includes(detail.value.status)) {
+    ElMessage.warning('任务正在处理中，暂不能保存')
+    return
+  }
   const product = productPayload()
   if (product.product_images.length > MAX_REFERENCE_IMAGES) {
     ElMessage.warning(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
@@ -580,7 +648,7 @@ async function saveAll() {
 
   savingTask.value = true
   try {
-    if (productEditable.value) {
+    if (productEditable.value && productDirty.value) {
       await updateTaskProductData(detail.value.id, product)
     }
     await updateTaskSubtemplateModels(detail.value.id, modelsPayload())
@@ -660,6 +728,7 @@ watch(taskId, initialize, { immediate: true })
 
 onBeforeUnmount(() => {
   if (resizeHintTimer) clearTimeout(resizeHintTimer)
+  if (taskPollTimer) clearTimeout(taskPollTimer)
   removeResizeListeners?.()
 })
 </script>

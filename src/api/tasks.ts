@@ -265,6 +265,12 @@ export async function updateTaskProductData(
   if (data.product_images.length > MAX_REFERENCE_IMAGES) {
     throw new Error(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
   }
+  const hasManualData = Boolean(
+    data.product_title.trim() ||
+    data.brand_name.trim() ||
+    data.product_bullets.length ||
+    data.product_images.length
+  )
   const supabase = requireSupabase()
   const { error } = await supabase
     .from('tasks')
@@ -273,7 +279,7 @@ export async function updateTaskProductData(
       brand_name: data.brand_name,
       product_bullets: data.product_bullets,
       product_images: data.product_images,
-      fetch_mode: 'manual'
+      fetch_mode: hasManualData ? 'manual' : 'auto'
     })
     .eq('id', id)
   if (error) throw new Error(error.message)
