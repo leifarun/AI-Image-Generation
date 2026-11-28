@@ -143,6 +143,16 @@ const selectedSubtemplateIds = computed(() =>
     .filter((id): id is string => Boolean(id && selected[id]))
 )
 
+const selectableRows = computed(() => subtemplateRows.value.filter((row) => Boolean(row.id)))
+const allSelected = computed(
+  () =>
+    selectableRows.value.length > 0 &&
+    selectableRows.value.every((row) => Boolean(row.id && selected[row.id]))
+)
+const partiallySelected = computed(
+  () => !allSelected.value && selectedSubtemplateIds.value.length > 0
+)
+
 const imageCount = computed(() =>
   isCreate.value
     ? selectedChildren.value.length
@@ -212,6 +222,13 @@ function resetCreateSelections() {
 
 function handleTemplateChange() {
   resetCreateSelections()
+}
+
+function toggleAllSubtemplates(checked: unknown) {
+  const value = Boolean(checked)
+  for (const row of selectableRows.value) {
+    if (row.id) selected[row.id] = value
+  }
 }
 
 async function initializeCreate() {
@@ -790,6 +807,15 @@ watch(taskId, initialize, { immediate: true })
           </template>
         </el-table-column>
         <el-table-column v-if="isCreate" label="开关" width="68" align="center">
+          <template #header>
+            <el-checkbox
+              :model-value="allSelected"
+              :indeterminate="partiallySelected"
+              @change="toggleAllSubtemplates"
+            >
+              开关
+            </el-checkbox>
+          </template>
           <template #default="{ row }">
             <el-checkbox v-if="row.id" v-model="selected[row.id]" />
             <span v-else>—</span>
