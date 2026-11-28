@@ -81,7 +81,6 @@ const createForm = reactive({
   asin: '',
   marketplace: 'US',
   selling_points: '',
-  remark: '',
   template_id: null as string | null,
   model: ''
 })
@@ -438,7 +437,6 @@ async function submitCreate() {
       asin: createForm.asin,
       marketplace: createForm.marketplace,
       selling_points: createForm.selling_points,
-      remark: createForm.remark,
       template_id: createForm.template_id,
       subtemplate_ids: selectedChildren.value.length ? selectedSubtemplateIds.value : [],
       subtemplate_notes: notesPayload(),
@@ -620,16 +618,6 @@ watch(taskId, initialize, { immediate: true })
               </div>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :md="8">
-            <el-form-item label="备注">
-              <el-input
-                v-model="createForm.remark"
-                maxlength="1000"
-                show-word-limit
-                placeholder="可选，记录这条任务的说明"
-              />
-            </el-form-item>
-          </el-col>
           <el-col :xs="24">
             <el-form-item label="竞品卖点补充（可选，每行一条）">
               <el-input
@@ -668,8 +656,7 @@ watch(taskId, initialize, { immediate: true })
             )
           }}
         </el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ detail.remark || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="竞品卖点补充" :span="2">{{ detail.selling_points || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="竞品卖点补充" :span="3">{{ detail.selling_points || '—' }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.error_message" label="失败原因" :span="3">
           <span class="error-text">{{ detail.error_message }}</span>
         </el-descriptions-item>
