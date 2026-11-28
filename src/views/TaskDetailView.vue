@@ -892,10 +892,10 @@ onBeforeUnmount(() => {
       <div class="subtemplate-table-wrap" @mousedown="handleColumnResizeStart">
       <el-table :data="subtemplateRows" border class="subtemplate-table">
         <el-table-column type="index" label="#" width="68" align="center" />
-        <el-table-column label="图片名称（子模板名称）" width="212">
+        <el-table-column label="图片名称" width="182">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
-        <el-table-column label="模型" width="211">
+        <el-table-column label="模型" width="267">
           <template #default="{ row }">
             <el-select
               v-if="row.id"
@@ -973,7 +973,7 @@ onBeforeUnmount(() => {
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="113" align="center">
+        <el-table-column label="操作" width="60" align="center">
           <template #default="{ row }">
             <template v-if="isCreate">—</template>
             <el-button
@@ -989,7 +989,7 @@ onBeforeUnmount(() => {
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="下载" width="76" align="center">
+        <el-table-column label="下载" width="60" align="center">
           <template #default="{ row, $index }">
             <template v-if="isCreate">—</template>
             <el-button
