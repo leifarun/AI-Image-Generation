@@ -79,7 +79,7 @@ const contentPlaceholders = computed(() =>
     ? placeholders.filter(
         (p) => p.key !== '{{子模板内容}}' && p.key !== '{{违禁词合规红线}}'
       )
-    : placeholders
+    : placeholders.filter((p) => p.key !== '{{自定义说明}}')
 )
 const hasSubtemplateVariable = computed(() => form.content.includes('{{子模板内容}}'))
 
