@@ -48,6 +48,8 @@ const parsedAsins = computed(() =>
 
 const tableData = ref<TaskRow[]>([])
 const loading = ref(false)
+const bulkDeleting = ref(false)
+const selectedRows = ref<TaskRow[]>([])
 const total = ref(0)
 const page = reactive({ current: 1, size: 20 })
 let lastLoadedAt = 0
@@ -77,12 +79,50 @@ async function loadData() {
   }
 }
 
+function taskQuery(pageNumber: number, pageSize: number) {
+  return {
+    page: pageNumber,
+    pageSize,
+    asins: parsedAsins.value.length ? parsedAsins.value : undefined,
+    status: filters.status || undefined,
+    marketplace: filters.marketplace || undefined,
+    brand: filters.brand.trim() || undefined,
+    creator: filters.creator.trim() || undefined,
+    from: filters.dateRange[0] ? new Date(filters.dateRange[0]).toISOString() : undefined,
+    to: filters.dateRange[1] ? new Date(filters.dateRange[1]).toISOString() : undefined
+  }
+}
+
+async function fetchAllFilteredTasks(): Promise<TaskRow[]> {
+  const rows: TaskRow[] = []
+  let current = 1
+  let expectedTotal = 0
+  while (true) {
+    const result = await fetchTasks(taskQuery(current, 1000))
+    rows.push(...result.rows)
+    expectedTotal = result.total
+    if (!result.rows.length || rows.length >= expectedTotal) break
+    current++
+  }
+  return rows
+}
+
+function clearSelection() {
+  selectedRows.value = []
+  gridRef.value?.clearCheckboxRow()
+}
+
+function handleSelectionChange({ records }: { records: TaskRow[] }) {
+  selectedRows.value = records
+}
+
 function handleSearch() {
   if (parsedAsins.value.length > 100) {
     ElMessage.warning(`最多查询 100 个 ASIN，当前识别到 ${parsedAsins.value.length} 个`)
     return
   }
   page.current = 1
+  clearSelection()
   loadData()
 }
 
@@ -94,6 +134,7 @@ function handleReset() {
   filters.creator = ''
   filters.dateRange = []
   page.current = 1
+  clearSelection()
   loadData()
 }
 
@@ -109,19 +150,11 @@ function modelText(row: TaskRow): string {
 
 async function exportCsv() {
   try {
-    const result = await fetchTasks({
-      page: 1,
-      pageSize: 1000,
-      asins: parsedAsins.value.length ? parsedAsins.value : undefined,
-      status: filters.status || undefined,
-      marketplace: filters.marketplace || undefined,
-      brand: filters.brand.trim() || undefined,
-      creator: filters.creator.trim() || undefined,
-      from: filters.dateRange[0] ? new Date(filters.dateRange[0]).toISOString() : undefined,
-      to: filters.dateRange[1] ? new Date(filters.dateRange[1]).toISOString() : undefined
-    })
+    const rows = selectedRows.value.length
+      ? [...selectedRows.value]
+      : await fetchAllFilteredTasks()
     const header = ['ASIN', '站点', '竞品品牌', '竞品标题', '模板', '模型', '提交人', '状态', '进度', '实际成本', '提交时间', '失败原因']
-    const body = result.rows.map((r) => [
+    const body = rows.map((r) => [
       r.asin,
       r.marketplace,
       r.brand_name ?? '',
@@ -145,9 +178,66 @@ async function exportCsv() {
     link.download = `任务导出-${dayjs().format('YYYYMMDD-HHmm')}.csv`
     link.click()
     URL.revokeObjectURL(url)
-    ElMessage.success(`已导出 ${result.rows.length} 条任务`)
+    ElMessage.success(
+      `已导出 ${rows.length} 条${selectedRows.value.length ? '勾选' : '筛选'}任务`
+    )
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '导出失败')
+  }
+}
+
+async function handleBulkDelete() {
+  let targets = selectedRows.value.length ? [...selectedRows.value] : []
+  try {
+    if (!targets.length) targets = await fetchAllFilteredTasks()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '获取待删除任务失败')
+    return
+  }
+  if (!targets.length) {
+    ElMessage.warning('当前没有可删除的任务')
+    return
+  }
+
+  const scope = selectedRows.value.length ? '已勾选' : '当前筛选结果中的全部'
+  try {
+    await ElMessageBox.confirm(
+      `确定删除${scope} ${targets.length} 个任务吗？任务结果图片也会一并删除，且无法恢复。`,
+      '批量删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        closeOnClickModal: false,
+        closeOnPressEscape: false,
+        showClose: false
+      }
+    )
+  } catch {
+    return
+  }
+
+  bulkDeleting.value = true
+  let deleted = 0
+  let failed = 0
+  try {
+    for (const row of targets) {
+      try {
+        await deleteTask(row.id)
+        deleted++
+      } catch {
+        failed++
+      }
+    }
+    clearSelection()
+    await loadData()
+    if (failed) {
+      ElMessage.warning(`已删除 ${deleted} 条，失败 ${failed} 条`)
+    } else {
+      ElMessage.success(`已删除 ${deleted} 条任务`)
+    }
+  } finally {
+    bulkDeleting.value = false
   }
 }
 
@@ -206,8 +296,10 @@ const gridOptions = reactive<VxeGridProps>({
   height: gridHeight.value,
   minHeight: 320,
   rowConfig: { keyField: 'id' },
+  checkboxConfig: { reserve: true, highlight: true },
   columnConfig: { resizable: true },
   columns: [
+    { type: 'checkbox', width: 44, fixed: 'left' },
     { type: 'seq', width: 44, fixed: 'left', title: '#' },
     { field: 'created_at', title: '提交时间', width: 136, fixed: 'left', formatter: ({ cellValue }) => formatDateTime(cellValue) },
     { field: 'creator_name', title: '提交人', width: 82, fixed: 'left' },
@@ -340,6 +432,14 @@ watch(gridHeight, (height) => {
 
         <el-button class="reset-button" @click="handleReset">重置</el-button>
         <el-button class="export-button" @click="exportCsv">导出 CSV</el-button>
+        <el-button
+          type="danger"
+          class="delete-all-button"
+          :loading="bulkDeleting"
+          @click="handleBulkDelete"
+        >
+          一键删除{{ selectedRows.length ? `（${selectedRows.length}）` : '' }}
+        </el-button>
         <el-button type="primary" class="create-button" @click="router.push('/tasks/new')">新建任务</el-button>
       </div>
 
@@ -350,6 +450,8 @@ watch(gridHeight, (height) => {
         :loading="loading"
         :pager-config="{ ...gridOptions.pagerConfig, total, currentPage: page.current, pageSize: page.size }"
         @page-change="handlePageChange"
+        @checkbox-change="handleSelectionChange"
+        @checkbox-all="handleSelectionChange"
       >
         <template #status="{ row }">
           <StatusTag :status="row.status" />
@@ -486,6 +588,7 @@ watch(gridHeight, (height) => {
 
 .reset-button,
 .export-button,
+.delete-all-button,
 .create-button {
   flex-shrink: 0;
 }
