@@ -69,6 +69,8 @@ const downloadingZip = ref(false)
 const uploading = ref(false)
 const productPanelOpen = ref(false)
 const showPrompt = ref(false)
+const activePromptText = ref('')
+const activePromptTitle = ref('组装后的 AI 指令')
 const resizeHint = reactive({ visible: false, x: 0, y: 0, width: 0 })
 const fileInput = ref<HTMLInputElement>()
 let resizeHintTimer: ReturnType<typeof setTimeout> | null = null
@@ -589,6 +591,105 @@ function modelsPayload(): Record<string, string> {
   return payload
 }
 
+interface PromptContext {
+  title: string
+  brand_name: string
+  bullets: string[]
+  images: string[]
+  compliance_redlines: string
+  all_selling_points: string
+  image_count: number
+  asin: string
+  marketplace: string
+  subtemplate_content: string
+  custom_note?: string
+}
+
+function frontAssemblePrompt(template: string | null, ctx: PromptContext): string {
+  const imageText = ctx.images.filter(Boolean).join('\n')
+  const bulletText = ctx.bullets.length
+    ? ctx.bullets.map((item, index) => `${index + 1}. ${item}`).join('\n')
+    : ''
+  const sellingText = ctx.all_selling_points || ''
+  const complianceText = ctx.compliance_redlines || ''
+  const subtemplateText = ctx.subtemplate_content || ''
+
+  const data: Record<string, string> = {
+    '图片数量': String(ctx.image_count),
+    '竞品图片': imageText,
+    '竞品标题': ctx.title,
+    '竞品品牌名': ctx.brand_name,
+    '竞品五点描述': bulletText,
+    '竞品卖点补充': sellingText,
+    '竞品资料': `【竞品图片】\n${imageText}\n【竞品标题】\n${ctx.title}\n【竞品品牌名】\n${ctx.brand_name}\n【竞品五点描述】\n${bulletText}\n【竞品卖点补充】\n${sellingText}`,
+    '子模板内容': subtemplateText,
+    '指定子模版': subtemplateText,
+    '指定子模板': subtemplateText,
+    '违禁词合规红线': complianceText,
+    '自定义要求': ctx.custom_note ?? '',
+    'ASIN': ctx.asin,
+    '站点': ctx.marketplace
+  }
+
+  if (!template) {
+    return `请根据以下竞品资料生成营销图：\n\n【竞品标题】\n${ctx.title || '（无）'}\n\n【竞品品牌名】\n${ctx.brand_name || '（无）'}\n\n【竞品五点描述】\n${bulletText || '（无）'}\n\n【竞品卖点补充】\n${sellingText || '（无）'}\n\n【违禁词合规红线】\n${complianceText || '（无）'}`
+  }
+
+  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|子模板内容|指定子模版|指定子模板|违禁词合规红线|自定义要求|ASIN|站点)\}\}/g
+  let resolved = template
+  for (let pass = 0; pass < 4; pass++) {
+    const next = resolved.replace(variablePattern, (_, key: string) => data[key] ?? '')
+    if (next === resolved) break
+    resolved = next
+  }
+  return resolved
+}
+
+function openRowPrompt(row: unknown, index: number): void {
+  if (!detail.value) return
+  const current = row as SubtemplateRow
+  const parent = detail.value.template_id
+    ? templates.value.find((item) => item.id === detail.value!.template_id)
+    : null
+  const child = current.id ? templates.value.find((item) => item.id === current.id) : null
+  const note = current.id ? (notes[current.id] ?? '').trim() : ''
+  const hasCustomNoteVariable = Boolean(parent?.content?.includes('{{自定义要求}}'))
+  const childContent = child
+    ? hasCustomNoteVariable
+      ? child.content
+      : `${child.content}${note ? `\n\n【自定义要求】\n${note}` : ''}`
+    : ''
+  const bullets = productForm.product_bullets_text
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const images = productForm.product_images_text
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const promptBase = frontAssemblePrompt(parent?.content ?? null, {
+    title: productForm.product_title.trim(),
+    brand_name: productForm.brand_name.trim(),
+    bullets,
+    images,
+    compliance_redlines: parent?.compliance_redlines ?? '',
+    all_selling_points: detail.value.selling_points ?? '',
+    image_count: subtemplateRows.value.length,
+    asin: detail.value.asin,
+    marketplace: detail.value.marketplace,
+    subtemplate_content: childContent,
+    custom_note: note
+  })
+
+  activePromptTitle.value = `组装后的 AI 指令 - ${child?.name ?? current.name}`
+  activePromptText.value =
+    `${promptBase}\n\n` +
+    `（本次只生成第 ${index + 1}/${subtemplateRows.value.length} 张图，对应图序：` +
+    `${child?.name ?? current.name}，请严格按照上面规则执行）`
+  showPrompt.value = true
+}
+
 async function submitCreate() {
   if (!createForm.asin.trim()) {
     ElMessage.warning('请输入 ASIN')
@@ -1025,8 +1126,8 @@ onBeforeUnmount(() => {
           width="140"
           align="center"
         >
-          <template #default>
-            <el-button link type="primary" size="small" @click="showPrompt = true">
+          <template #default="{ row, $index }">
+            <el-button link type="primary" size="small" @click="openRowPrompt(row, $index)">
               查看
             </el-button>
           </template>
@@ -1094,8 +1195,8 @@ onBeforeUnmount(() => {
       </div>
     </el-card>
 
-    <el-dialog v-if="detail && isAdmin" v-model="showPrompt" title="组装后的 AI 指令" width="720px">
-      <pre class="prompt-full">{{ detail.prompt_assembled || '—' }}</pre>
+    <el-dialog v-if="detail && isAdmin" v-model="showPrompt" :title="activePromptTitle" width="720px">
+      <pre class="prompt-full">{{ activePromptText || '—' }}</pre>
       <template #footer>
         <el-button @click="showPrompt = false">关闭</el-button>
       </template>
