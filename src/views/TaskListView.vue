@@ -214,9 +214,9 @@ const gridOptions = reactive<VxeGridProps>({
     { field: 'creator_name', title: '提交人', width: 82, fixed: 'left' },
     { field: 'asin', title: 'ASIN', width: 112, fixed: 'left' },
     { field: 'marketplace', title: '站点', width: 62 },
-    { field: 'selling_points', title: '竞品卖点补充', minWidth: 150, showOverflow: true },
-    { field: 'template_name', title: '模板', minWidth: 105, showOverflow: true },
-    { field: 'model', title: '模型', width: 132, formatter: ({ row }) => modelText(row) },
+    { field: 'selling_points', title: '竞品卖点补充', width: 188, showOverflow: true },
+    { field: 'template_name', title: '模板', width: 140, showOverflow: true },
+    { field: 'model', title: '模型', width: 180, formatter: ({ row }) => modelText(row) },
     { title: '实际成本', width: 86, visible: isAdmin.value, slots: { default: 'cost' } },
     {
       field: 'status',
@@ -228,10 +228,10 @@ const gridOptions = reactive<VxeGridProps>({
     {
       field: 'error_message',
       title: '失败原因',
-      minWidth: 150,
+      width: 78,
       showOverflow: true
     },
-    { title: '生成结果', width: 92, fixed: 'right', slots: { default: 'results' } },
+    { title: '生成结果', width: 68, fixed: 'right', slots: { default: 'results' } },
     {
       title: '操作',
       width: 82,
