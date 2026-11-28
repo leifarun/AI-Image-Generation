@@ -11,6 +11,7 @@ import {
   type DashboardTaskFilter
 } from '@/api/dashboard'
 import type { TaskRow } from '@/api/tasks'
+import { getTaskFailureReason } from '@/constants/task'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/datetime'
 import { calcActualCost, formatDoubaoModelLabel, formatMoney } from '@/constants/pricing'
@@ -20,6 +21,7 @@ interface StatCard {
   value: number | string
   tone: string
   filter?: DashboardTaskFilter
+  hint?: string
 }
 
 defineOptions({ name: 'DashboardView' })
@@ -62,7 +64,13 @@ const stats = computed<StatCard[]>(() => [
   { label: '排队中', value: summary.value.queued, tone: 'amber', filter: 'queued' },
   { label: '处理中', value: summary.value.processing, tone: 'green', filter: 'processing' },
   { label: '累计完成', value: summary.value.totalSucceeded, tone: 'green', filter: 'succeeded' },
-  { label: '累计失败', value: summary.value.totalFailed, tone: 'red', filter: 'failed' },
+  {
+    label: '累计失败',
+    value: summary.value.totalFailed,
+    tone: 'red',
+    filter: 'failed',
+    hint: `含待补充 ${summary.value.needInput}`
+  },
   { label: '累计出图', value: summary.value.totalImages, tone: 'blue' },
   { label: '累计成本', value: formatMoney(summary.value.totalCost), tone: 'green' }
 ])
@@ -94,9 +102,8 @@ const statusDistribution = computed(() => [
   { name: '排队中', value: summary.value.queued },
   { name: '处理中', value: summary.value.processing },
   { name: '待抓取', value: summary.value.pendingFetch },
-  { name: '待补充', value: summary.value.needInput },
   { name: '已完成', value: summary.value.totalSucceeded },
-  { name: '失败', value: summary.value.totalFailed }
+  { name: '失败（含待补充）', value: summary.value.totalFailed }
 ].filter((item) => item.value > 0))
 
 const hasStatusData = computed(() => statusDistribution.value.length > 0)
@@ -107,7 +114,7 @@ function renderStatusChart() {
     chartInstance = echarts.init(chartRef.value)
   }
   chartInstance.setOption({
-    color: ['#e6a23c', '#409eff', '#909399', '#f56c6c', '#67c23a', '#c0c4cc'],
+    color: ['#e6a23c', '#409eff', '#909399', '#67c23a', '#f56c6c'],
     tooltip: { trigger: 'item', formatter: '{b}：{c}（{d}%）' },
     legend: { bottom: 0, icon: 'circle' },
     series: [
@@ -211,7 +218,9 @@ onBeforeUnmount(() => {
       >
         <div class="stat-label">{{ card.label }}</div>
         <div class="stat-value">{{ card.value }}</div>
-        <div v-if="card.filter" class="stat-hint">点击查看明细</div>
+        <div v-if="card.hint || card.filter" class="stat-hint">
+          {{ card.hint ? `${card.hint} · 点击查看明细` : '点击查看明细' }}
+        </div>
       </el-card>
     </div>
 
@@ -250,6 +259,11 @@ onBeforeUnmount(() => {
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
               <StatusTag :status="row.status" />
+            </template>
+          </el-table-column>
+          <el-table-column label="失败原因" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ getTaskFailureReason(row.status, row.error_message) || '—' }}
             </template>
           </el-table-column>
           <el-table-column label="进度" width="90">

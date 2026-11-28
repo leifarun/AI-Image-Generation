@@ -11,12 +11,24 @@ export interface TaskStatusDef {
 export const TASK_STATUS_LIST: TaskStatusDef[] = [
   { value: 'pending_fetch', label: '待抓取', type: 'info' },
   { value: 'fetching', label: '抓取中', type: 'primary' },
-  { value: 'need_input', label: '待补充', type: 'warning' },
+  { value: 'need_input', label: '待补充', type: 'danger' },
   { value: 'queued', label: '排队中', type: 'primary' },
   { value: 'generating', label: '生成中', type: 'primary' },
   { value: 'succeeded', label: '已完成', type: 'success' },
   { value: 'failed', label: '失败', type: 'danger' }
 ]
+
+export const FETCH_FAILURE_REASON = '竞品资料抓取失败（反爬、ASIN 找不到、网络错误等）'
+
+/** 待补充本质上是竞品资料抓取失败，统一展示标准化失败原因。 */
+export function getTaskFailureReason(
+  status: string | null | undefined,
+  errorMessage: string | null | undefined
+): string {
+  if (status === 'need_input') return FETCH_FAILURE_REASON
+  if (status === 'failed') return errorMessage ?? ''
+  return ''
+}
 
 const STATUS_MAP = new Map(TASK_STATUS_LIST.map((s) => [s.value, s]))
 

@@ -68,7 +68,7 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
       supabase
         .from('task_view')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'failed'),
+        .in('status', ['failed', 'need_input']),
       supabase
         .from('task_usage_view')
         .select('model, reference_count, image_count'),
@@ -122,7 +122,7 @@ export async function fetchDashboardTasks(
     queued: ['queued'],
     processing: ['fetching', 'generating'],
     succeeded: ['succeeded'],
-    failed: ['failed'],
+    failed: ['failed', 'need_input'],
     need_input: ['need_input']
   }
   const result = await fetchTasks({

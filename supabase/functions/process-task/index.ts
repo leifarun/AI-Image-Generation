@@ -242,9 +242,10 @@ async function handleTask(taskId: string): Promise<void> {
       }).eq('id', taskId)
     } catch (e) {
       // 抓取失败 → 转人工补充
+      console.error(`[task ${taskId}] 竞品资料抓取失败:`, e)
       await supabase.from('tasks').update({
         status: 'need_input',
-        error_message: `自动抓取失败：${String(e).slice(0, 200)}`
+        error_message: '竞品资料抓取失败（反爬、ASIN 找不到、网络错误等）'
       }).eq('id', taskId)
       return
     }

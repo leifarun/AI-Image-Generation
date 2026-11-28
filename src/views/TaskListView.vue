@@ -11,7 +11,7 @@ import {
   deleteTask,
   type TaskRow
 } from '@/api/tasks'
-import { TASK_STATUS_LIST, getStatusLabel } from '@/constants/task'
+import { TASK_STATUS_LIST, getStatusLabel, getTaskFailureReason } from '@/constants/task'
 import { MARKETPLACE_OPTIONS, formatMarketplaceLabel } from '@/constants/marketplace'
 import { calcActualCost, formatDoubaoModelLabel, formatMoney } from '@/constants/pricing'
 import { formatDateTime } from '@/utils/datetime'
@@ -46,6 +46,12 @@ const parsedAsins = computed(() =>
   )]
 )
 
+const statusQuery = computed(() => {
+  if (!filters.status) return undefined
+  if (filters.status === 'failed') return ['failed', 'need_input']
+  return [filters.status]
+})
+
 const tableData = ref<TaskRow[]>([])
 const loading = ref(false)
 const selectedRows = ref<TaskRow[]>([])
@@ -61,7 +67,7 @@ async function loadData() {
       page: page.current,
       pageSize: page.size,
       asins: parsedAsins.value.length ? parsedAsins.value : undefined,
-      status: filters.status || undefined,
+      statuses: statusQuery.value,
       marketplace: filters.marketplace || undefined,
       brand: filters.brand.trim() || undefined,
       creator: filters.creator.trim() || undefined,
@@ -83,7 +89,7 @@ function taskQuery(pageNumber: number, pageSize: number) {
     page: pageNumber,
     pageSize,
     asins: parsedAsins.value.length ? parsedAsins.value : undefined,
-    status: filters.status || undefined,
+    statuses: statusQuery.value,
     marketplace: filters.marketplace || undefined,
     brand: filters.brand.trim() || undefined,
     creator: filters.creator.trim() || undefined,
@@ -165,7 +171,7 @@ async function exportCsv() {
       progressText(r),
       Number(r.actual_cost ?? calcActualCost(r.result_models, r.result_reference_counts)).toFixed(2),
       formatDateTime(r.created_at),
-      r.error_message ?? ''
+      getTaskFailureReason(r.status, r.error_message)
     ])
     const csv = [header, ...body]
       .map((cells) => cells.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
@@ -264,7 +270,8 @@ const gridOptions = reactive<VxeGridProps>({
       field: 'error_message',
       title: '失败原因',
       width: 315,
-      showOverflow: true
+      showOverflow: true,
+      slots: { default: 'reason' }
     },
     { title: '生成结果', width: 77, fixed: 'right', slots: { default: 'results' } },
     {
@@ -391,6 +398,9 @@ watch(gridHeight, (height) => {
       >
         <template #status="{ row }">
           <StatusTag :status="row.status" />
+        </template>
+        <template #reason="{ row }">
+          {{ getTaskFailureReason(row.status, row.error_message) || '—' }}
         </template>
         <template #progress="{ row }">
           <span :class="{ 'progress-done': row.result_count >= row.image_count }">

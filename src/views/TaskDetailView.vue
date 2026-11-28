@@ -28,6 +28,7 @@ import {
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/datetime'
 import { formatMarketplaceLabel } from '@/constants/marketplace'
+import { getTaskFailureReason } from '@/constants/task'
 import {
   DOUBAO_IMAGE_PRICES,
   calcImageCost,
@@ -850,8 +851,14 @@ onBeforeUnmount(() => {
           {{ formatMoney(Number(detail.actual_cost ?? 0)) }}
         </el-descriptions-item>
         <el-descriptions-item label="竞品卖点补充" :span="3">{{ detail.selling_points || '—' }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.error_message" label="失败原因" :span="3">
-          <span class="error-text">{{ detail.error_message }}</span>
+        <el-descriptions-item
+          v-if="detail.error_message || detail.status === 'need_input'"
+          label="失败原因"
+          :span="3"
+        >
+          <span class="error-text">
+            {{ getTaskFailureReason(detail.status, detail.error_message) }}
+          </span>
         </el-descriptions-item>
       </el-descriptions>
     </el-card>
