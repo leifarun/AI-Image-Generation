@@ -714,6 +714,9 @@ async function handleRetryRow(row: unknown) {
     return
   }
   try {
+    if (productEditable.value && productDirty.value) {
+      await updateTaskProductData(detail.value.id, productPayload())
+    }
     await updateTaskSubtemplateModels(detail.value.id, modelsPayload())
     await updateTaskSubtemplateNotes(detail.value.id, notesPayload())
     await retryTaskImage(detail.value.id, current.id)
