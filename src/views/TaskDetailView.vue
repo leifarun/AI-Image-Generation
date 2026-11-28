@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, ArrowRight, Download, Upload } from '@element-plus/icons-vue'
@@ -68,7 +68,10 @@ const downloadingZip = ref(false)
 const uploading = ref(false)
 const productPanelOpen = ref(false)
 const showPrompt = ref(false)
+const resizeHint = reactive({ visible: false, x: 0, y: 0, width: 0 })
 const fileInput = ref<HTMLInputElement>()
+let resizeHintTimer: ReturnType<typeof setTimeout> | null = null
+let removeResizeListeners: (() => void) | null = null
 
 const templates = ref<SopTemplateRow[]>([])
 const detail = ref<Awaited<ReturnType<typeof fetchTaskDetail>> | null>(null)
@@ -261,6 +264,41 @@ function toggleAllSubtemplates(checked: unknown) {
   for (const row of selectableRows.value) {
     if (row.id) selected[row.id] = value
   }
+}
+
+function handleColumnResizeStart(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  const headerCell = target?.closest('th') as HTMLElement | null
+  if (!headerCell) return
+  const rect = headerCell.getBoundingClientRect()
+  if (event.clientX < rect.right - 8) return
+
+  if (resizeHintTimer) clearTimeout(resizeHintTimer)
+  removeResizeListeners?.()
+  const startX = event.clientX
+  const startWidth = rect.width
+  resizeHint.visible = true
+  resizeHint.width = Math.round(startWidth)
+  resizeHint.x = Math.min(window.innerWidth - 70, event.clientX + 8)
+  resizeHint.y = Math.max(8, rect.top - 30)
+
+  const handleMove = (moveEvent: MouseEvent) => {
+    resizeHint.width = Math.max(40, Math.round(startWidth + moveEvent.clientX - startX))
+    resizeHint.x = Math.min(window.innerWidth - 70, Math.max(8, moveEvent.clientX + 8))
+  }
+  const handleUp = () => {
+    removeResizeListeners?.()
+    removeResizeListeners = null
+    resizeHintTimer = setTimeout(() => {
+      resizeHint.visible = false
+    }, 500)
+  }
+  removeResizeListeners = () => {
+    document.removeEventListener('mousemove', handleMove)
+    document.removeEventListener('mouseup', handleUp)
+  }
+  document.addEventListener('mousemove', handleMove, { passive: true })
+  document.addEventListener('mouseup', handleUp)
 }
 
 async function initializeCreate() {
@@ -619,6 +657,11 @@ async function handleRetryRow(row: unknown) {
 }
 
 watch(taskId, initialize, { immediate: true })
+
+onBeforeUnmount(() => {
+  if (resizeHintTimer) clearTimeout(resizeHintTimer)
+  removeResizeListeners?.()
+})
 </script>
 
 <template>
@@ -846,6 +889,7 @@ watch(taskId, initialize, { immediate: true })
         </div>
       </template>
 
+      <div class="subtemplate-table-wrap" @mousedown="handleColumnResizeStart">
       <el-table :data="subtemplateRows" border class="subtemplate-table">
         <el-table-column type="index" label="#" width="68" align="center" />
         <el-table-column label="图片名称（子模板名称）" width="212">
@@ -960,6 +1004,14 @@ watch(taskId, initialize, { immediate: true })
           </template>
         </el-table-column>
       </el-table>
+      <div
+        v-if="resizeHint.visible"
+        class="column-width-hint"
+        :style="{ left: `${resizeHint.x}px`, top: `${resizeHint.y}px` }"
+      >
+        {{ resizeHint.width }} px
+      </div>
+      </div>
     </el-card>
 
     <el-dialog v-if="detail && isAdmin" v-model="showPrompt" title="组装后的 AI 指令" width="720px">
@@ -1138,6 +1190,20 @@ watch(taskId, initialize, { immediate: true })
   :deep(.el-textarea__inner) {
     line-height: 1.4;
   }
+}
+
+.column-width-hint {
+  position: fixed;
+  z-index: 5000;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(31, 45, 61, 0.94);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .requirement-input {
