@@ -225,33 +225,6 @@ export async function deleteTask(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-/** 待补充状态：补填竞品资料 */
-export async function supplementTask(
-  id: string,
-  data: {
-    product_title: string
-    brand_name: string
-    product_bullets: string[]
-    product_images: string[]
-  }
-): Promise<void> {
-  if (data.product_images.length > MAX_REFERENCE_IMAGES) {
-    throw new Error(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
-  }
-  const supabase = requireSupabase()
-  const { error } = await supabase
-    .from('tasks')
-    .update({
-      product_title: data.product_title,
-      brand_name: data.brand_name,
-      product_bullets: data.product_bullets,
-      product_images: data.product_images,
-      fetch_mode: 'manual'
-    })
-    .eq('id', id)
-  if (error) throw new Error(error.message)
-}
-
 /** 编辑竞品资料（等待输出前、失败/成功后重新生成前均可） */
 export async function updateTaskProductData(
   id: string,

@@ -46,12 +46,6 @@ const parsedAsins = computed(() =>
   )]
 )
 
-const statusQuery = computed(() => {
-  if (!filters.status) return undefined
-  if (filters.status === 'failed') return ['failed', 'need_input']
-  return [filters.status]
-})
-
 const tableData = ref<TaskRow[]>([])
 const loading = ref(false)
 const selectedRows = ref<TaskRow[]>([])
@@ -67,7 +61,7 @@ async function loadData() {
       page: page.current,
       pageSize: page.size,
       asins: parsedAsins.value.length ? parsedAsins.value : undefined,
-      statuses: statusQuery.value,
+      status: filters.status || undefined,
       marketplace: filters.marketplace || undefined,
       brand: filters.brand.trim() || undefined,
       creator: filters.creator.trim() || undefined,
@@ -89,7 +83,7 @@ function taskQuery(pageNumber: number, pageSize: number) {
     page: pageNumber,
     pageSize,
     asins: parsedAsins.value.length ? parsedAsins.value : undefined,
-    statuses: statusQuery.value,
+    status: filters.status || undefined,
     marketplace: filters.marketplace || undefined,
     brand: filters.brand.trim() || undefined,
     creator: filters.creator.trim() || undefined,

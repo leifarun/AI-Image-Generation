@@ -21,7 +21,6 @@ interface StatCard {
   value: number | string
   tone: string
   filter?: DashboardTaskFilter
-  hint?: string
 }
 
 defineOptions({ name: 'DashboardView' })
@@ -35,7 +34,6 @@ const summary = ref<DashboardSummary>({
   queued: 0,
   processing: 0,
   pendingFetch: 0,
-  needInput: 0,
   totalSucceeded: 0,
   totalFailed: 0,
   totalImages: 0,
@@ -55,8 +53,7 @@ const filterOptions: Array<{ label: string; value: DashboardTaskFilter }> = [
   { label: '排队中', value: 'queued' },
   { label: '处理中', value: 'processing' },
   { label: '已完成', value: 'succeeded' },
-  { label: '失败', value: 'failed' },
-  { label: '待补充', value: 'need_input' }
+  { label: '失败', value: 'failed' }
 ]
 
 const stats = computed<StatCard[]>(() => [
@@ -64,13 +61,7 @@ const stats = computed<StatCard[]>(() => [
   { label: '排队中', value: summary.value.queued, tone: 'amber', filter: 'queued' },
   { label: '处理中', value: summary.value.processing, tone: 'green', filter: 'processing' },
   { label: '累计完成', value: summary.value.totalSucceeded, tone: 'green', filter: 'succeeded' },
-  {
-    label: '累计失败',
-    value: summary.value.totalFailed,
-    tone: 'red',
-    filter: 'failed',
-    hint: `含待补充 ${summary.value.needInput}`
-  },
+  { label: '累计失败', value: summary.value.totalFailed, tone: 'red', filter: 'failed' },
   { label: '累计出图', value: summary.value.totalImages, tone: 'blue' },
   { label: '累计成本', value: formatMoney(summary.value.totalCost), tone: 'green' }
 ])
@@ -103,7 +94,7 @@ const statusDistribution = computed(() => [
   { name: '处理中', value: summary.value.processing },
   { name: '待抓取', value: summary.value.pendingFetch },
   { name: '已完成', value: summary.value.totalSucceeded },
-  { name: '失败（含待补充）', value: summary.value.totalFailed }
+  { name: '失败', value: summary.value.totalFailed }
 ].filter((item) => item.value > 0))
 
 const hasStatusData = computed(() => statusDistribution.value.length > 0)
@@ -218,9 +209,7 @@ onBeforeUnmount(() => {
       >
         <div class="stat-label">{{ card.label }}</div>
         <div class="stat-value">{{ card.value }}</div>
-        <div v-if="card.hint || card.filter" class="stat-hint">
-          {{ card.hint ? `${card.hint} · 点击查看明细` : '点击查看明细' }}
-        </div>
+        <div v-if="card.filter" class="stat-hint">点击查看明细</div>
       </el-card>
     </div>
 

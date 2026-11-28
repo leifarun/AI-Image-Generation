@@ -8,14 +8,12 @@ export type DashboardTaskFilter =
   | 'processing'
   | 'succeeded'
   | 'failed'
-  | 'need_input'
 
 export interface DashboardSummary {
   totalTasks: number
   queued: number
   processing: number
   pendingFetch: number
-  needInput: number
   totalSucceeded: number
   totalFailed: number
   totalImages: number
@@ -35,7 +33,6 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     queuedResult,
     processingResult,
     pendingResult,
-    needInputResult,
     succeededResult,
     failedResult,
     usageResult,
@@ -60,15 +57,11 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
       supabase
         .from('task_view')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'need_input'),
-      supabase
-        .from('task_view')
-        .select('id', { count: 'exact', head: true })
         .eq('status', 'succeeded'),
       supabase
         .from('task_view')
         .select('id', { count: 'exact', head: true })
-        .in('status', ['failed', 'need_input']),
+        .eq('status', 'failed'),
       supabase
         .from('task_usage_view')
         .select('model, reference_count, image_count'),
@@ -80,7 +73,6 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     queuedResult.error ||
     processingResult.error ||
     pendingResult.error ||
-    needInputResult.error ||
     succeededResult.error ||
     failedResult.error ||
     usageResult.error
@@ -104,7 +96,6 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     queued: queuedResult.count ?? 0,
     processing: processingResult.count ?? 0,
     pendingFetch: pendingResult.count ?? 0,
-    needInput: needInputResult.count ?? 0,
     totalSucceeded: succeededResult.count ?? 0,
     totalFailed: failedResult.count ?? 0,
     totalImages,
@@ -122,8 +113,7 @@ export async function fetchDashboardTasks(
     queued: ['queued'],
     processing: ['fetching', 'generating'],
     succeeded: ['succeeded'],
-    failed: ['failed', 'need_input'],
-    need_input: ['need_input']
+    failed: ['failed']
   }
   const result = await fetchTasks({
     page: 1,

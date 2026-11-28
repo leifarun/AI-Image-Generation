@@ -36,7 +36,7 @@ const isOwner = computed(
 )
 const editable = computed(() => {
   if (!props.task) return false
-  const allowedStatus = ['pending_fetch', 'queued', 'need_input', 'failed', 'succeeded']
+  const allowedStatus = ['pending_fetch', 'queued', 'failed', 'succeeded']
   return (userStore.role === 'admin' || isOwner.value) && allowedStatus.includes(props.task.status)
 })
 

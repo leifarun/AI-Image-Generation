@@ -234,7 +234,7 @@ const isOwner = computed(
 const productEditable = computed(() => {
   if (isCreate.value) return true
   if (!detail.value) return false
-  const allowed = ['pending_fetch', 'queued', 'need_input', 'failed', 'succeeded']
+  const allowed = ['pending_fetch', 'queued', 'failed', 'succeeded']
   return (isAdmin.value || isOwner.value) && allowed.includes(detail.value.status)
 })
 const canSaveTask = computed(() => {
@@ -490,7 +490,6 @@ function rowStatus(row: unknown, index: number): string {
     return firstMissingIndex() === index ? 'generating' : 'queued'
   }
   if (detail.value?.status === 'succeeded') return 'succeeded'
-  if (detail.value?.status === 'need_input') return 'need_input'
   if (detail.value?.status === 'fetching') return 'fetching'
   return 'queued'
 }
@@ -852,7 +851,7 @@ onBeforeUnmount(() => {
         </el-descriptions-item>
         <el-descriptions-item label="竞品卖点补充" :span="3">{{ detail.selling_points || '—' }}</el-descriptions-item>
         <el-descriptions-item
-          v-if="detail.error_message || detail.status === 'need_input'"
+          v-if="detail.error_message || detail.status === 'failed'"
           label="失败原因"
           :span="3"
         >
