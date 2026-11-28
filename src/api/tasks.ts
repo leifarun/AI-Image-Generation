@@ -257,7 +257,7 @@ export async function updateTaskProductData(
   if (error) throw new Error(error.message)
 }
 
-/** 保存每个子模板的自定义说明（会追加到对应子模板内容里） */
+/** 保存每个子模板的自定义要求（会追加到对应子模板内容里） */
 export async function updateTaskSubtemplateNotes(
   id: string,
   notes: Record<string, string>

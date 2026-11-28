@@ -775,17 +775,18 @@ watch(taskId, initialize, { immediate: true })
             {{ formatDoubaoModelLabel(isCreate ? createForm.model : resultFor(row, $index)?.model || detail?.model) }}
           </template>
         </el-table-column>
-        <el-table-column label="自定义说明" width="278">
+        <el-table-column label="自定义要求" width="278">
           <template #default="{ row }">
             <el-input
               v-if="row.id"
               v-model="notes[row.id]"
               type="textarea"
-              :rows="2"
+              :rows="5"
               resize="none"
-              placeholder="将追加到该子模板变量中"
+              :placeholder="'例如：\n尺寸改成40x60CM\n数量改成5PCS'"
+              class="requirement-input"
             />
-            <span v-else class="field-hint">独立模板暂不支持单图说明</span>
+            <span v-else class="field-hint">独立模板暂不支持单图要求</span>
           </template>
         </el-table-column>
         <el-table-column v-if="isCreate" label="开关" width="68" align="center">
@@ -1024,6 +1025,15 @@ watch(taskId, initialize, { immediate: true })
 
   :deep(.el-textarea__inner) {
     line-height: 1.4;
+  }
+}
+
+.requirement-input {
+  width: 100%;
+
+  :deep(.el-textarea__inner) {
+    width: 100%;
+    min-height: 164px;
   }
 }
 

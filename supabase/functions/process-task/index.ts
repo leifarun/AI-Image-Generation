@@ -261,7 +261,7 @@ async function handleTask(taskId: string): Promise<void> {
     subtemplate_content: subtemplates
       .map((s) => {
         const note = (subtemplateNotes[s.id] ?? '').trim()
-        return `【${s.name}】\n${s.content}${note ? `\n\n【自定义说明】\n${note}` : ''}`
+        return `【${s.name}】\n${s.content}${note ? `\n\n【自定义要求】\n${note}` : ''}`
       })
       .join('\n\n')
   }
@@ -311,11 +311,11 @@ async function handleTask(taskId: string): Promise<void> {
     console.log(`[task ${taskId}] 生成第 ${index + 1}/${imageCount} 张`)
     const child = subtemplates[index] ?? null
     const childNote = child ? (subtemplateNotes[child.id] ?? '').trim() : ''
-    const hasCustomNoteVariable = Boolean(templateContent?.includes('{{自定义说明}}'))
+    const hasCustomNoteVariable = Boolean(templateContent?.includes('{{自定义要求}}'))
     const childContent = child
       ? hasCustomNoteVariable
         ? child.content
-        : `${child.content}${childNote ? `\n\n【自定义说明】\n${childNote}` : ''}`
+        : `${child.content}${childNote ? `\n\n【自定义要求】\n${childNote}` : ''}`
       : ''
     const promptBase = assemblePrompt(templateContent, {
       ...ctx,
@@ -533,7 +533,7 @@ function assemblePrompt(
     '指定子模版': subtemplateText,
     '指定子模板': subtemplateText,
     '违禁词合规红线': complianceText,
-    '自定义说明': ctx.custom_note ?? '',
+    '自定义要求': ctx.custom_note ?? '',
     'ASIN': ctx.asin,
     '站点': ctx.marketplace
   }
@@ -542,7 +542,7 @@ function assemblePrompt(
     return `请根据以下竞品资料生成营销图：\n\n【竞品标题】\n${ctx.title || '（无）'}\n\n【竞品品牌名】\n${ctx.brand_name || '（无）'}\n\n【竞品五点描述】\n${bulletText || '（无）'}\n\n【竞品卖点补充】\n${sellingText || '（无）'}\n\n【违禁词合规红线】\n${complianceText || '（无）'}`
   }
 
-  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|子模板内容|指定子模版|指定子模板|违禁词合规红线|自定义说明|ASIN|站点)\}\}/g
+  const variablePattern = /\{\{(图片数量|竞品图片|竞品标题|竞品品牌名|竞品五点描述|竞品卖点补充|竞品资料|子模板内容|指定子模版|指定子模板|违禁词合规红线|自定义要求|ASIN|站点)\}\}/g
   let resolved = template
   // 多轮替换：支持“违禁词合规红线”字段内部再引用竞品品牌名等变量。
   for (let pass = 0; pass < 4; pass++) {
