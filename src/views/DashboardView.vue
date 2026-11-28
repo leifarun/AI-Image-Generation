@@ -81,10 +81,13 @@ function modelText(row: {
 }
 
 function actualCost(row: {
+  actual_cost?: number | null
   result_models?: string[] | null
   result_reference_counts?: number[] | null
 }): string {
-  return formatMoney(calcActualCost(row.result_models, row.result_reference_counts))
+  return formatMoney(
+    Number(row.actual_cost ?? calcActualCost(row.result_models, row.result_reference_counts))
+  )
 }
 
 const statusDistribution = computed(() => [

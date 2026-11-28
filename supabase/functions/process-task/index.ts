@@ -50,6 +50,7 @@ interface TaskRow {
   image_count: number
   subtemplate_ids: string[] | null
   subtemplate_notes: Record<string, string> | null
+  subtemplate_models: Record<string, string> | null
 }
 
 interface RuntimeSettings {
@@ -201,6 +202,10 @@ async function handleTask(taskId: string): Promise<void> {
     t.subtemplate_notes && typeof t.subtemplate_notes === 'object'
       ? t.subtemplate_notes
       : {}
+  const subtemplateModels: Record<string, string> =
+    t.subtemplate_models && typeof t.subtemplate_models === 'object'
+      ? t.subtemplate_models
+      : {}
   const subtemplates: Array<{ id: string; name: string; content: string }> = []
   for (const id of subtemplateIds) {
     const { data: sub } = await supabase
@@ -311,6 +316,9 @@ async function handleTask(taskId: string): Promise<void> {
     console.log(`[task ${taskId}] 生成第 ${index + 1}/${imageCount} 张`)
     const child = subtemplates[index] ?? null
     const childNote = child ? (subtemplateNotes[child.id] ?? '').trim() : ''
+    const generationModel = child
+      ? (subtemplateModels[child.id] || doubaoModel)
+      : doubaoModel
     const hasCustomNoteVariable = Boolean(templateContent?.includes('{{自定义要求}}'))
     const childContent = child
       ? hasCustomNoteVariable
@@ -336,11 +344,11 @@ async function handleTask(taskId: string): Promise<void> {
     const generatedImage = await callDoubao(
       prompt,
       referenceImages,
-      doubaoModel,
+      generationModel,
       runtimeSettings.timeoutMs,
       `${runtimeSettings.outputWidth}x${runtimeSettings.outputHeight}`
     )
-    console.log(`[task ${taskId}] 第 ${index + 1} 张豆包返回成功`)
+    console.log(`[task ${taskId}] 第 ${index + 1} 张豆包返回成功，模型=${generationModel}`)
     let savedPath: string
     if (generatedImage.b64) {
       savedPath = await saveImageBytesToStorage(
@@ -363,13 +371,41 @@ async function handleTask(taskId: string): Promise<void> {
     } else {
       throw new Error('豆包 API 未返回图片')
     }
-    await supabase.from('task_results').insert({
-      task_id: taskId,
-      image_path: savedPath,
-      model: doubaoModel,
-      reference_count: referenceImages.length,
-      subtemplate_id: child?.id ?? null
-    })
+    const { data: insertedResult, error: resultInsertError } = await supabase
+      .from('task_results')
+      .insert({
+        task_id: taskId,
+        image_path: savedPath,
+        model: generationModel,
+        reference_count: referenceImages.length,
+        subtemplate_id: child?.id ?? null
+      })
+      .select('id')
+      .single()
+    if (resultInsertError || !insertedResult) {
+      throw new Error(`保存结果图记录失败：${resultInsertError?.message ?? '未知'}`)
+    }
+
+    const costAmount = calculateGenerationCost(
+      generationModel,
+      referenceImages.length,
+      runtimeSettings.outputWidth,
+      runtimeSettings.outputHeight
+    )
+    const { error: costInsertError } = await supabase
+      .from('task_cost_events')
+      .insert({
+        task_id: taskId,
+        result_id: insertedResult.id,
+        subtemplate_id: child?.id ?? null,
+        model: generationModel,
+        reference_count: referenceImages.length,
+        amount: costAmount
+      })
+    if (costInsertError) {
+      console.error(`[task ${taskId}] 写入成本流水失败:`, costInsertError)
+      throw new Error(`写入成本流水失败：${costInsertError.message}`)
+    }
 
     const allDone = subtemplates.length
       ? subtemplates.every(
@@ -493,6 +529,56 @@ async function resolveRuntimeSettings(): Promise<RuntimeSettings> {
 function numberInRange(value: unknown, min: number, max: number, fallback: number): number {
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : fallback
+}
+
+function calculateGenerationCost(
+  model: string,
+  referenceCount: number,
+  outputWidth: number,
+  outputHeight: number
+): number {
+  const prices = getModelPricing(model)
+  const count = Math.max(0, Math.min(referenceCount, 9))
+  const billableReferences = prices.inputFirstFree
+    ? Math.max(0, count - 1)
+    : count
+  const outputPixels = Math.max(0, outputWidth) * Math.max(0, outputHeight)
+  const sizeFactor = outputPixels > 0
+    ? Math.max(0.25, Math.round((outputPixels / (1600 * 1600)) * 100) / 100)
+    : 1
+  return roundCost(
+    prices.outputPrice * sizeFactor + prices.inputPrice * billableReferences
+  )
+}
+
+function getModelPricing(model: string): {
+  outputPrice: number
+  inputPrice: number
+  inputFirstFree: boolean
+} {
+  if (model.startsWith('doubao-seedream-5-5-')) {
+    return { outputPrice: 0.13, inputPrice: 0.05, inputFirstFree: false }
+  }
+  if (model.startsWith('doubao-seedream-5-0-pro-')) {
+    return { outputPrice: 0.3, inputPrice: 0.02, inputFirstFree: true }
+  }
+  if (model.startsWith('doubao-seedream-5-0-flash-')) {
+    return { outputPrice: 0.12, inputPrice: 0, inputFirstFree: false }
+  }
+  if (model.startsWith('doubao-seedream-5-0-')) {
+    return { outputPrice: 0.22, inputPrice: 0, inputFirstFree: false }
+  }
+  if (model.startsWith('doubao-seedream-4-5-')) {
+    return { outputPrice: 0.25, inputPrice: 0, inputFirstFree: false }
+  }
+  if (model.startsWith('doubao-seedream-4-0-')) {
+    return { outputPrice: 0.2, inputPrice: 0, inputFirstFree: false }
+  }
+  return { outputPrice: 0.13, inputPrice: 0.05, inputFirstFree: false }
+}
+
+function roundCost(value: number): number {
+  return Math.round(value * 10000) / 10000
 }
 
 // ---------- 组装指令（纯占位符替换，结构完全由模板决定） ----------

@@ -17,6 +17,7 @@ export interface TaskRow {
   product_images: string[] | null
   subtemplate_ids: string[] | null
   subtemplate_notes: Record<string, string> | null
+  subtemplate_models: Record<string, string> | null
   status: string
   error_message: string | null
   retry_count: number
@@ -25,6 +26,7 @@ export interface TaskRow {
   result_models: string[] | null
   result_reference_counts: number[] | null
   result_subtemplate_ids: Array<string | null> | null
+  actual_cost: number
   created_by: string
   created_at: string
   updated_at: string
@@ -91,6 +93,7 @@ export interface CreateTaskInput {
   template_id: string | null
   subtemplate_ids?: string[]
   subtemplate_notes?: Record<string, string>
+  subtemplate_models?: Record<string, string>
   model?: string
   product_title?: string
   brand_name?: string
@@ -137,6 +140,7 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
       image_count: imageCount,
       subtemplate_ids: input.subtemplate_ids ?? [],
       subtemplate_notes: input.subtemplate_notes ?? {},
+      subtemplate_models: input.subtemplate_models ?? {},
       product_title: productTitle || null,
       brand_name: brandName || null,
       product_bullets: productBullets.length ? productBullets : null,
@@ -157,6 +161,15 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
 }
 
 /** 任务详情（查视图拿模板名/提交人，另查结果图片列表） */
+export interface TaskCostEvent {
+  id: string
+  subtemplate_id: string | null
+  model: string | null
+  reference_count: number
+  amount: number
+  created_at: string
+}
+
 export async function fetchTaskDetail(id: string): Promise<
   TaskRow & {
     results: Array<{
@@ -166,6 +179,7 @@ export async function fetchTaskDetail(id: string): Promise<
       reference_count: number
       subtemplate_id: string | null
     }>
+    cost_events: TaskCostEvent[]
   }
 > {
   const supabase = requireSupabase()
@@ -184,6 +198,13 @@ export async function fetchTaskDetail(id: string): Promise<
     .order('created_at', { ascending: true })
   if (resError) throw new Error(resError.message)
 
+  const { data: costEvents, error: costError } = await supabase
+    .from('task_cost_events')
+    .select('id, subtemplate_id, model, reference_count, amount, created_at')
+    .eq('task_id', id)
+    .order('created_at', { ascending: true })
+  if (costError) throw new Error(costError.message)
+
   return {
     ...(data as unknown as TaskRow),
     results: (results ?? []) as Array<{
@@ -192,7 +213,8 @@ export async function fetchTaskDetail(id: string): Promise<
       model: string | null
       reference_count: number
       subtemplate_id: string | null
-    }>
+    }>,
+    cost_events: (costEvents ?? []) as TaskCostEvent[]
   }
 }
 
@@ -266,6 +288,19 @@ export async function updateTaskSubtemplateNotes(
   const { error } = await supabase
     .from('tasks')
     .update({ subtemplate_notes: notes })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/** 保存每个子模板使用的模型 */
+export async function updateTaskSubtemplateModels(
+  id: string,
+  models: Record<string, string>
+): Promise<void> {
+  const supabase = requireSupabase()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ subtemplate_models: models })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }

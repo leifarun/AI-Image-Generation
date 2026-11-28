@@ -163,7 +163,7 @@ async function exportCsv() {
       r.creator_name ?? '',
       getStatusLabel(r.status),
       progressText(r),
-      calcActualCost(r.result_models, r.result_reference_counts).toFixed(2),
+      Number(r.actual_cost ?? calcActualCost(r.result_models, r.result_reference_counts)).toFixed(2),
       formatDateTime(r.created_at),
       r.error_message ?? ''
     ])
@@ -398,7 +398,7 @@ watch(gridHeight, (height) => {
           </span>
         </template>
         <template #cost="{ row }">
-          {{ formatMoney(calcActualCost(row.result_models, row.result_reference_counts)) }}
+          {{ formatMoney(Number(row.actual_cost ?? calcActualCost(row.result_models, row.result_reference_counts))) }}
         </template>
         <template #results="{ row }">
           <el-button link type="primary" size="small" @click="openResults(row)">查看</el-button>

@@ -9,6 +9,7 @@ import {
   fetchTaskDetail,
   retryTaskImage,
   updateTaskProductData,
+  updateTaskSubtemplateModels,
   updateTaskSubtemplateNotes,
   uploadReferenceImage,
   resolveTaskResultUrls
@@ -29,7 +30,7 @@ import { formatDateTime } from '@/utils/datetime'
 import { formatMarketplaceLabel } from '@/constants/marketplace'
 import {
   DOUBAO_IMAGE_PRICES,
-  calcActualCost,
+  calcImageCost,
   estimateTaskCost,
   formatCostRange,
   formatDoubaoModelLabel,
@@ -94,6 +95,7 @@ const productForm = reactive({
 
 const notes = reactive<Record<string, string>>({})
 const selected = reactive<Record<string, boolean>>({})
+const rowModels = reactive<Record<string, string>>({})
 
 const parentTemplates = computed(() => templates.value.filter((t) => !t.parent_id))
 const selectedTemplate = computed(
@@ -179,15 +181,29 @@ const manualImageCount = computed(
   () => productForm.product_images_text.split('\n').map((item) => item.trim()).filter(Boolean).length
 )
 
-const costEstimate = computed(() =>
-  estimateTaskCost(
-    createForm.model,
-    imageCount.value,
-    referenceImageLimit.value,
-    outputWidth.value,
-    outputHeight.value
+const costEstimate = computed(() => {
+  const rows = subtemplateRows.value.filter(
+    (row) => !selectedChildren.value.length || Boolean(row.id && selected[row.id])
   )
-)
+  return rows.reduce(
+    (total, row) => {
+      const estimate = estimateTaskCost(
+        row.id ? rowModels[row.id] || createForm.model : createForm.model,
+        1,
+        referenceImageLimit.value,
+        outputWidth.value,
+        outputHeight.value
+      )
+      return {
+        perImageMin: total.perImageMin + estimate.perImageMin,
+        perImageMax: total.perImageMax + estimate.perImageMax,
+        totalMin: total.totalMin + estimate.totalMin,
+        totalMax: total.totalMax + estimate.totalMax
+      }
+    },
+    { perImageMin: 0, perImageMax: 0, totalMin: 0, totalMax: 0 }
+  )
+})
 
 const costText = computed(() => {
   if (selectedChildren.value.length && imageCount.value <= 0) return '请选择要生成的图片'
@@ -195,7 +211,15 @@ const costText = computed(() => {
   return formatCostRange(costEstimate.value)
 })
 
-const costModelLabel = computed(() => getDoubaoImagePrice(createForm.model).label)
+const costModelLabel = computed(() => {
+  const models = subtemplateRows.value
+    .filter((row) => !selectedChildren.value.length || Boolean(row.id && selected[row.id]))
+    .map((row) => (row.id ? rowModels[row.id] || createForm.model : createForm.model))
+    .filter(Boolean)
+  const unique = [...new Set(models)]
+  if (unique.length > 1) return '按各行模型'
+  return getDoubaoImagePrice(unique[0] || createForm.model).label
+})
 const previewUrls = computed(() => Object.values(resultUrls.value).filter(Boolean))
 
 const isOwner = computed(
@@ -212,16 +236,24 @@ const canSaveTask = computed(() => (isCreate.value ? true : isAdmin.value || isO
 function resetCreateSelections() {
   for (const key of Object.keys(notes)) delete notes[key]
   for (const key of Object.keys(selected)) delete selected[key]
+  for (const key of Object.keys(rowModels)) delete rowModels[key]
   for (const row of subtemplateRows.value) {
     if (row.id) {
       notes[row.id] = ''
       selected[row.id] = false
+      rowModels[row.id] = createForm.model
     }
   }
 }
 
 function handleTemplateChange() {
   resetCreateSelections()
+}
+
+function syncRowModelsToDefault() {
+  for (const row of subtemplateRows.value) {
+    if (row.id) rowModels[row.id] = createForm.model
+  }
 }
 
 function toggleAllSubtemplates(checked: unknown) {
@@ -265,10 +297,16 @@ async function initializeCreate() {
 
 function populateDetailFields(taskDetail: NonNullable<typeof detail.value>) {
   for (const key of Object.keys(notes)) delete notes[key]
+  for (const key of Object.keys(rowModels)) delete rowModels[key]
   const sourceNotes = taskDetail.subtemplate_notes ?? {}
+  const sourceModels = taskDetail.subtemplate_models ?? {}
   for (const [key, value] of Object.entries(sourceNotes)) notes[key] = value
   for (const row of subtemplateRows.value) {
-    if (row.id && notes[row.id] === undefined) notes[row.id] = ''
+    if (row.id) {
+      if (notes[row.id] === undefined) notes[row.id] = ''
+      rowModels[row.id] =
+        sourceModels[row.id] || taskDetail.model || createForm.model
+    }
   }
 
   productForm.product_title = taskDetail.product_title ?? ''
@@ -324,6 +362,22 @@ function resultFor(row: unknown, index: number): DetailResult | undefined {
 
 function firstMissingIndex(): number {
   return subtemplateRows.value.findIndex((row, index) => !resultFor(row, index))
+}
+
+function rowActualCost(row: unknown, index: number): number {
+  if (isCreate.value || !detail.value) return 0
+  const current = row as SubtemplateRow
+  const events = detail.value.cost_events ?? []
+  const exact = current.id
+    ? events.filter((event) => event.subtemplate_id === current.id)
+    : []
+  const legacy = events.filter((event) => !event.subtemplate_id)
+  const eventCost =
+    exact.reduce((sum, event) => sum + Number(event.amount ?? 0), 0) +
+    Number(legacy[index]?.amount ?? 0)
+  if (eventCost > 0) return eventCost
+  const result = resultFor(row, index)
+  return result ? calcImageCost(result.model, result.reference_count) : 0
 }
 
 function rowStatus(row: unknown, index: number): string {
@@ -425,6 +479,14 @@ function notesPayload(): Record<string, string> {
   return payload
 }
 
+function modelsPayload(): Record<string, string> {
+  const payload: Record<string, string> = {}
+  for (const row of subtemplateRows.value) {
+    if (row.id && rowModels[row.id]) payload[row.id] = rowModels[row.id]
+  }
+  return payload
+}
+
 async function submitCreate() {
   if (!createForm.asin.trim()) {
     ElMessage.warning('请输入 ASIN')
@@ -457,6 +519,7 @@ async function submitCreate() {
       template_id: createForm.template_id,
       subtemplate_ids: selectedChildren.value.length ? selectedSubtemplateIds.value : [],
       subtemplate_notes: notesPayload(),
+      subtemplate_models: modelsPayload(),
       model: createForm.model,
       ...product
     })
@@ -482,6 +545,7 @@ async function saveAll() {
     if (productEditable.value) {
       await updateTaskProductData(detail.value.id, product)
     }
+    await updateTaskSubtemplateModels(detail.value.id, modelsPayload())
     await updateTaskSubtemplateNotes(detail.value.id, notesPayload())
     ElMessage.success('任务已保存')
     await initialize()
@@ -544,6 +608,8 @@ async function handleRetryRow(row: unknown) {
     return
   }
   try {
+    await updateTaskSubtemplateModels(detail.value.id, modelsPayload())
+    await updateTaskSubtemplateNotes(detail.value.id, notesPayload())
     await retryTaskImage(detail.value.id, current.id)
     ElMessage.success('已重新排队生成该张图片')
     await initialize()
@@ -612,7 +678,12 @@ watch(taskId, initialize, { immediate: true })
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="模型" required>
-              <el-select v-model="createForm.model" filterable style="width: 100%">
+              <el-select
+                v-model="createForm.model"
+                filterable
+                style="width: 100%"
+                @change="syncRowModelsToDefault"
+              >
                 <el-option
                   v-for="item in modelOptions"
                   :key="item.value"
@@ -664,14 +735,7 @@ watch(taskId, initialize, { immediate: true })
           {{ detail.results.length }} / {{ subtemplateRows.length || detail.image_count }}
         </el-descriptions-item>
         <el-descriptions-item label="实际成本">
-          {{
-            formatMoney(
-              calcActualCost(
-                detail.results.map((item) => item.model),
-                detail.results.map((item) => item.reference_count)
-              )
-            )
-          }}
+          {{ formatMoney(Number(detail.actual_cost ?? 0)) }}
         </el-descriptions-item>
         <el-descriptions-item label="竞品卖点补充" :span="3">{{ detail.selling_points || '—' }}</el-descriptions-item>
         <el-descriptions-item v-if="detail.error_message" label="失败原因" :span="3">
@@ -788,8 +852,30 @@ watch(taskId, initialize, { immediate: true })
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
         <el-table-column label="模型" width="211">
+          <template #default="{ row }">
+            <el-select
+              v-if="row.id"
+              v-model="rowModels[row.id]"
+              filterable
+              class="row-model-select"
+            >
+              <el-option
+                v-for="item in modelOptions"
+                :key="item.value"
+                :value="item.value"
+                :label="item.label"
+              />
+            </el-select>
+            <span v-else>{{ formatDoubaoModelLabel(createForm.model || detail?.model) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="实际成本" width="110" align="center">
           <template #default="{ row, $index }">
-            {{ formatDoubaoModelLabel(isCreate ? createForm.model : resultFor(row, $index)?.model || detail?.model) }}
+            <span v-if="isCreate">—</span>
+            <span v-else-if="rowActualCost(row, $index) > 0">
+              {{ formatMoney(rowActualCost(row, $index)) }}
+            </span>
+            <span v-else>—</span>
           </template>
         </el-table-column>
         <el-table-column label="自定义要求" width="278">
@@ -1061,6 +1147,10 @@ watch(taskId, initialize, { immediate: true })
     width: 100%;
     min-height: 164px;
   }
+}
+
+.row-model-select {
+  width: 100%;
 }
 
 .result-thumb {
