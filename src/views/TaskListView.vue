@@ -228,13 +228,13 @@ const gridOptions = reactive<VxeGridProps>({
     {
       field: 'error_message',
       title: '失败原因',
-      width: 78,
+      width: 315,
       showOverflow: true
     },
-    { title: '生成结果', width: 68, fixed: 'right', slots: { default: 'results' } },
+    { title: '生成结果', width: 77, fixed: 'right', slots: { default: 'results' } },
     {
       title: '操作',
-      width: 82,
+      width: 68,
       fixed: 'right',
       showOverflow: false,
       slots: { default: 'action' }
