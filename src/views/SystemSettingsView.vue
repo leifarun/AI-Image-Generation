@@ -95,6 +95,17 @@ onMounted(load)
           <span class="form-tip">建议先保持 2，确认豆包账号限流后再调高</span>
         </el-form-item>
 
+        <el-form-item label="自动删除数据时间" class="form-span-2">
+          <div class="inline-control">
+            <span>提交时间超过</span>
+            <el-input-number v-model="form.auto_delete_days" :min="1" :max="3650" />
+            <span>天后，每天凌晨 00:00 自动从数据库删除</span>
+          </div>
+          <div class="field-help">
+            按上海时间每天 00:00 执行。删除任务时会同步删除该任务的结果图数据库记录，实际存储桶文件暂不处理。
+          </div>
+        </el-form-item>
+
         <el-form-item label="默认豆包图片模型" class="form-span-2">
           <el-select
             v-model="form.default_doubao_model"

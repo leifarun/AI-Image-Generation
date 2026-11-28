@@ -13,6 +13,7 @@ export interface SystemSettings {
   reference_jpeg_quality: number
   reference_max_total_mb: number
   reference_image_limit: number
+  auto_delete_days: number
 }
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
@@ -26,7 +27,8 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   reference_max_edge: 800,
   reference_jpeg_quality: 88,
   reference_max_total_mb: 8,
-  reference_image_limit: 9
+  reference_image_limit: 9,
+  auto_delete_days: 30
 }
 
 interface SettingRow {
@@ -98,6 +100,12 @@ export async function fetchSystemSettings(): Promise<SystemSettings> {
       1,
       9,
       DEFAULT_SYSTEM_SETTINGS.reference_image_limit
+    ),
+    auto_delete_days: toNumberInRange(
+      values.auto_delete_days,
+      1,
+      3650,
+      DEFAULT_SYSTEM_SETTINGS.auto_delete_days
     )
   }
 }
@@ -188,7 +196,8 @@ export async function saveSystemSettings(settings: SystemSettings): Promise<void
     ['reference_max_edge', settings.reference_max_edge],
     ['reference_jpeg_quality', settings.reference_jpeg_quality],
     ['reference_max_total_mb', settings.reference_max_total_mb],
-    ['reference_image_limit', settings.reference_image_limit]
+    ['reference_image_limit', settings.reference_image_limit],
+    ['auto_delete_days', settings.auto_delete_days]
   ]
 
   for (const [key, value] of entries) {

@@ -48,7 +48,6 @@ const parsedAsins = computed(() =>
 
 const tableData = ref<TaskRow[]>([])
 const loading = ref(false)
-const bulkDeleting = ref(false)
 const selectedRows = ref<TaskRow[]>([])
 const total = ref(0)
 const page = reactive({ current: 1, size: 20 })
@@ -183,61 +182,6 @@ async function exportCsv() {
     )
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '导出失败')
-  }
-}
-
-async function handleBulkDelete() {
-  let targets = selectedRows.value.length ? [...selectedRows.value] : []
-  try {
-    if (!targets.length) targets = await fetchAllFilteredTasks()
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '获取待删除任务失败')
-    return
-  }
-  if (!targets.length) {
-    ElMessage.warning('当前没有可删除的任务')
-    return
-  }
-
-  const scope = selectedRows.value.length ? '已勾选' : '当前筛选结果中的全部'
-  try {
-    await ElMessageBox.confirm(
-      `确定删除${scope} ${targets.length} 个任务吗？任务结果图片也会一并删除，且无法恢复。`,
-      '批量删除确认',
-      {
-        type: 'warning',
-        confirmButtonText: '确认删除',
-        cancelButtonText: '取消',
-        closeOnClickModal: false,
-        closeOnPressEscape: false,
-        showClose: false
-      }
-    )
-  } catch {
-    return
-  }
-
-  bulkDeleting.value = true
-  let deleted = 0
-  let failed = 0
-  try {
-    for (const row of targets) {
-      try {
-        await deleteTask(row.id)
-        deleted++
-      } catch {
-        failed++
-      }
-    }
-    clearSelection()
-    await loadData()
-    if (failed) {
-      ElMessage.warning(`已删除 ${deleted} 条，失败 ${failed} 条`)
-    } else {
-      ElMessage.success(`已删除 ${deleted} 条任务`)
-    }
-  } finally {
-    bulkDeleting.value = false
   }
 }
 
@@ -432,14 +376,6 @@ watch(gridHeight, (height) => {
 
         <el-button class="reset-button" @click="handleReset">重置</el-button>
         <el-button class="export-button" @click="exportCsv">导出 CSV</el-button>
-        <el-button
-          type="danger"
-          class="delete-all-button"
-          :loading="bulkDeleting"
-          @click="handleBulkDelete"
-        >
-          一键删除{{ selectedRows.length ? `（${selectedRows.length}）` : '' }}
-        </el-button>
         <el-button type="primary" class="create-button" @click="router.push('/tasks/new')">新建任务</el-button>
       </div>
 
@@ -588,7 +524,6 @@ watch(gridHeight, (height) => {
 
 .reset-button,
 .export-button,
-.delete-all-button,
 .create-button {
   flex-shrink: 0;
 }
