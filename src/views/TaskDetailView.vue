@@ -806,7 +806,7 @@ watch(taskId, initialize, { immediate: true })
             <span v-else class="field-hint">独立模板暂不支持单图要求</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="isCreate" label="开关" width="78" align="center">
+        <el-table-column v-if="isCreate" label="开关" width="88" align="center">
           <template #header>
             <el-checkbox
               :model-value="allSelected"
