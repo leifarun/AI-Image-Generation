@@ -932,16 +932,6 @@ onBeforeUnmount(() => {
       </div>
     </el-card>
 
-    <el-card v-if="detail && isAdmin" shadow="never" class="section-card">
-      <template #header>
-        <div class="section-head">
-          <span>组装后的 AI 指令（仅管理员可见）</span>
-          <el-button size="small" @click="showPrompt = true">查看全文</el-button>
-        </div>
-      </template>
-      <div class="prompt-preview">{{ detail.prompt_assembled || '—（将在生成时组装）' }}</div>
-    </el-card>
-
     <el-card v-if="isCreate || detail" shadow="never" class="section-card">
       <template #header>
         <div class="section-head">
@@ -1027,6 +1017,18 @@ onBeforeUnmount(() => {
           <template #default="{ row }">
             <el-checkbox v-if="row.id" v-model="selected[row.id]" />
             <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-if="!isCreate && isAdmin"
+          label="组装后的AI指令"
+          width="140"
+          align="center"
+        >
+          <template #default>
+            <el-button link type="primary" size="small" @click="showPrompt = true">
+              查看
+            </el-button>
           </template>
         </el-table-column>
         <el-table-column label="当前状态" width="116" align="center">
