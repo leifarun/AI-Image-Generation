@@ -17,7 +17,6 @@ export interface TaskRow {
   product_images: string[] | null
   subtemplate_ids: string[] | null
   subtemplate_notes: Record<string, string> | null
-  remark: string | null
   status: string
   error_message: string | null
   retry_count: number
@@ -89,7 +88,6 @@ export interface CreateTaskInput {
   asin: string
   marketplace: string
   selling_points: string
-  remark?: string
   template_id: string | null
   subtemplate_ids?: string[]
   subtemplate_notes?: Record<string, string>
@@ -134,7 +132,6 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
       asin: input.asin.trim(),
       marketplace: input.marketplace,
       selling_points: input.selling_points.trim(),
-      remark: input.remark?.trim() || null,
       template_id: input.template_id,
       model,
       image_count: imageCount,
@@ -256,16 +253,6 @@ export async function updateTaskProductData(
       product_images: data.product_images,
       fetch_mode: 'manual'
     })
-    .eq('id', id)
-  if (error) throw new Error(error.message)
-}
-
-/** 更新任务备注 */
-export async function updateTaskRemark(id: string, remark: string): Promise<void> {
-  const supabase = requireSupabase()
-  const { error } = await supabase
-    .from('tasks')
-    .update({ remark: remark.trim() || null })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }

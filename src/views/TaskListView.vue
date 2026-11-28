@@ -120,7 +120,7 @@ async function exportCsv() {
       from: filters.dateRange[0] ? new Date(filters.dateRange[0]).toISOString() : undefined,
       to: filters.dateRange[1] ? new Date(filters.dateRange[1]).toISOString() : undefined
     })
-    const header = ['ASIN', '站点', '竞品品牌', '竞品标题', '模板', '模型', '提交人', '状态', '进度', '实际成本', '备注', '提交时间', '失败原因']
+    const header = ['ASIN', '站点', '竞品品牌', '竞品标题', '模板', '模型', '提交人', '状态', '进度', '实际成本', '提交时间', '失败原因']
     const body = result.rows.map((r) => [
       r.asin,
       r.marketplace,
@@ -132,7 +132,6 @@ async function exportCsv() {
       getStatusLabel(r.status),
       progressText(r),
       calcActualCost(r.result_models, r.result_reference_counts).toFixed(2),
-      r.remark ?? '',
       formatDateTime(r.created_at),
       r.error_message ?? ''
     ])
