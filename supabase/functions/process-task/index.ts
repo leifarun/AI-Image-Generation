@@ -222,8 +222,14 @@ async function handleTask(taskId: string): Promise<void> {
   let productBullets = t.product_bullets
   let productImages = t.product_images
 
-  // 手动提供了任意竞品资料时，尊重人工内容，不再用前台抓取覆盖。
-  if (t.fetch_mode !== 'manual' && !productTitle && !productBullets) {
+  // 只要没有真实竞品资料（标题/品牌/五点/图片都为空）就抓取；有任意资料则不抓、不覆盖。
+  const hasProductData = Boolean(
+    (productTitle ?? '').trim() ||
+    (productBrand ?? '').trim() ||
+    (Array.isArray(productBullets) && productBullets.length > 0) ||
+    (Array.isArray(productImages) && productImages.length > 0)
+  )
+  if (!hasProductData) {
     console.log(`[task ${taskId}] 开始抓取亚马逊 ${t.marketplace}/${t.asin}`)
     try {
       const fetched = await fetchAmazonListing(t.asin, t.marketplace)

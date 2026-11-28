@@ -235,23 +235,24 @@ export async function updateTaskProductData(
     product_images: string[]
   }
 ): Promise<void> {
-  if (data.product_images.length > MAX_REFERENCE_IMAGES) {
+  const productTitle = data.product_title.trim()
+  const brandName = data.brand_name.trim()
+  const productBullets = data.product_bullets.map((item) => item.trim()).filter(Boolean)
+  const productImages = data.product_images.map((item) => item.trim()).filter(Boolean)
+  if (productImages.length > MAX_REFERENCE_IMAGES) {
     throw new Error(`竞品图片最多 ${MAX_REFERENCE_IMAGES} 张`)
   }
   const hasManualData = Boolean(
-    data.product_title.trim() ||
-    data.brand_name.trim() ||
-    data.product_bullets.length ||
-    data.product_images.length
+    productTitle || brandName || productBullets.length || productImages.length
   )
   const supabase = requireSupabase()
   const { error } = await supabase
     .from('tasks')
     .update({
-      product_title: data.product_title,
-      brand_name: data.brand_name,
-      product_bullets: data.product_bullets,
-      product_images: data.product_images,
+      product_title: productTitle || null,
+      brand_name: brandName || null,
+      product_bullets: productBullets.length ? productBullets : null,
+      product_images: productImages.length ? productImages : null,
       fetch_mode: hasManualData ? 'manual' : 'auto'
     })
     .eq('id', id)
