@@ -41,6 +41,3 @@ export function getStatusLabel(value: string | null | undefined): string {
 export function getStatusType(value: string | null | undefined): TaskStatusDef['type'] {
   return getStatusDef(value).type
 }
-
-/** 状态标签组件名（供 vxe-table 列渲染用） */
-export const STATUS_TAG_COMPONENT = 'TaskStatusTag'
